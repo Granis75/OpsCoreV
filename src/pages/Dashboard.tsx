@@ -1,9 +1,7 @@
 import { useEffect, useState } from 'react'
-import { ArrowUpRight } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { PageSection } from '../components/ui/PageSection'
 import { SurfaceCard } from '../components/ui/SurfaceCard'
-import { navigationItems } from '../data/navigation'
 import { isSupabaseConfigured, supabase } from '../lib/supabase'
 
 interface DashboardKpis {
@@ -15,7 +13,11 @@ interface DashboardKpis {
 
 interface AlertItem {
   id: string
+  type: 'maintenance' | 'expense' | 'reputation'
   message: string
+  severity: 'critical' | 'warning'
+  href: string
+  state: string
 }
 
 type Signal = {
@@ -77,13 +79,19 @@ const emptyKpis: DashboardKpis = {
 
 type Event = Signal
 
-interface EventGroup {
-  id: string
-  type: Event['type']
-  entity: string
-  isIncident: boolean
-  latestTimestamp: string
-  events: Event[]
+function getDashboardUserLabel(email: string | null | undefined) {
+  if (!email) {
+    return 'there'
+  }
+
+  const [localPart] = email.split('@')
+  const cleaned = localPart.replace(/[._-]+/g, ' ').trim()
+
+  if (!cleaned) {
+    return email
+  }
+
+  return cleaned.replace(/\b\w/g, (letter) => letter.toUpperCase())
 }
 
 function getTodayDateString() {
@@ -117,6 +125,18 @@ function formatActivityTime(value: string) {
     hour: '2-digit',
     minute: '2-digit',
   }).format(date)
+}
+
+function formatEventType(type: Event['type']) {
+  if (type === 'maintenance') {
+    return 'Maintenance'
+  }
+
+  if (type === 'expense') {
+    return 'Expenses'
+  }
+
+  return 'Reputation'
 }
 
 function pluralize(count: number, singular: string, plural = `${singular}s`) {
@@ -198,49 +218,6 @@ function sortEvents(events: Event[]) {
   )
 }
 
-function groupEvents(events: Event[]) {
-  const groups = new Map<string, EventGroup>()
-
-  for (const event of sortEvents(events)) {
-    const groupId = `${event.type}:${event.entity}`
-    const existingGroup = groups.get(groupId)
-
-    if (!existingGroup) {
-      groups.set(groupId, {
-        id: groupId,
-        type: event.type,
-        entity: event.entity,
-        isIncident: event.severity === 'critical',
-        latestTimestamp: event.timestamp,
-        events: [event],
-      })
-      continue
-    }
-
-    existingGroup.events.push(event)
-    existingGroup.isIncident =
-      existingGroup.isIncident || event.severity === 'critical'
-
-    if (
-      new Date(event.timestamp).getTime() >
-      new Date(existingGroup.latestTimestamp).getTime()
-    ) {
-      existingGroup.latestTimestamp = event.timestamp
-    }
-  }
-
-  return [...groups.values()]
-    .map((group) => ({
-      ...group,
-      events: sortEvents(group.events),
-    }))
-    .sort(
-      (left, right) =>
-        new Date(right.latestTimestamp).getTime() -
-        new Date(left.latestTimestamp).getTime(),
-    )
-}
-
 function getSeverityToneClasses(severity: Event['severity']) {
   if (severity === 'critical') {
     return 'bg-red-50 text-red-600'
@@ -263,31 +240,6 @@ function getSeverityLabel(severity: Event['severity']) {
   }
 
   return 'Normal'
-}
-
-function buildPriorityActions(
-  kpis: DashboardKpis,
-  alerts: AlertItem[],
-): string[] {
-  const actions: string[] = []
-
-  if (kpis.criticalTickets > 0) {
-    actions.push(
-      `${kpis.criticalTickets} critical ticket${
-        kpis.criticalTickets > 1 ? 's' : ''
-      } blocking operations`,
-    )
-  }
-
-  if (alerts.some((a) => a.id === 'overdue-tickets')) {
-    actions.push('Overdue tickets require immediate attention')
-  }
-
-  if (alerts.some((a) => a.id === 'pending-expenses')) {
-    actions.push('Expenses pending validation')
-  }
-
-  return actions
 }
 
 async function getKpis(): Promise<DashboardKpis> {
@@ -367,6 +319,7 @@ async function getAlerts(): Promise<AlertItem[]> {
     { count: criticalTicketsCount, error: criticalTicketsError },
     { count: overdueTicketsCount, error: overdueTicketsError },
     { count: pendingExpensesCount, error: pendingExpensesError },
+    { count: negativeReviewsCount, error: negativeReviewsError },
   ] = await Promise.all([
     supabase
       .from('maintenance_tickets')
@@ -383,6 +336,10 @@ async function getAlerts(): Promise<AlertItem[]> {
       .from('cash_expenses')
       .select('id', { count: 'exact', head: true })
       .eq('status', 'submitted'),
+    supabase
+      .from('reviews')
+      .select('id', { count: 'exact', head: true })
+      .lte('rating', 3),
   ])
 
   if (criticalTicketsError) {
@@ -397,13 +354,21 @@ async function getAlerts(): Promise<AlertItem[]> {
     throw new Error(pendingExpensesError.message)
   }
 
+  if (negativeReviewsError) {
+    throw new Error(negativeReviewsError.message)
+  }
+
   const alerts: AlertItem[] = []
 
   if ((criticalTicketsCount ?? 0) > 0) {
     const count = criticalTicketsCount ?? 0
     alerts.push({
       id: 'critical-tickets',
-      message: `${count} critical ${pluralize(count, 'ticket')} need attention`,
+      type: 'maintenance',
+      message: `${count} critical ${pluralize(count, 'ticket')}`,
+      severity: 'critical',
+      href: '/maintenance',
+      state: 'Immediate',
     })
   }
 
@@ -411,7 +376,11 @@ async function getAlerts(): Promise<AlertItem[]> {
     const count = overdueTicketsCount ?? 0
     alerts.push({
       id: 'overdue-tickets',
+      type: 'maintenance',
       message: `${count} overdue ${pluralize(count, 'ticket')}`,
+      severity: 'warning',
+      href: '/maintenance',
+      state: 'No progress',
     })
   }
 
@@ -419,7 +388,23 @@ async function getAlerts(): Promise<AlertItem[]> {
     const count = pendingExpensesCount ?? 0
     alerts.push({
       id: 'pending-expenses',
+      type: 'expense',
       message: `${count} ${pluralize(count, 'expense')} pending approval`,
+      severity: 'warning',
+      href: '/expenses',
+      state: 'Awaiting approval',
+    })
+  }
+
+  if ((negativeReviewsCount ?? 0) > 0) {
+    const count = negativeReviewsCount ?? 0
+    alerts.push({
+      id: 'negative-reviews',
+      type: 'reputation',
+      message: `${count} negative ${pluralize(count, 'review')}`,
+      severity: count > 1 ? 'critical' : 'warning',
+      href: '/reputation',
+      state: 'Guest follow-up',
     })
   }
 
@@ -539,14 +524,14 @@ interface KpiCardProps {
 
 function KpiCard({ label, value, helper }: KpiCardProps) {
   return (
-    <div className="rounded-3xl border border-white/70 bg-white/80 p-6 shadow-shell backdrop-blur">
-      <div className="space-y-3">
-        <p className="text-3xl font-semibold tracking-tight text-slate-950 md:text-4xl">
+    <div className="rounded-3xl border border-white/70 bg-white/80 p-5 shadow-shell backdrop-blur">
+      <div className="space-y-2">
+        <p className="text-2xl font-semibold tracking-tight text-slate-950 md:text-3xl">
           {value}
         </p>
         <div className="space-y-1">
           <p className="text-sm font-semibold text-slate-700">{label}</p>
-          <p className="text-sm leading-6 text-slate-500">{helper}</p>
+          <p className="text-xs leading-5 text-slate-500">{helper}</p>
         </div>
       </div>
     </div>
@@ -554,21 +539,19 @@ function KpiCard({ label, value, helper }: KpiCardProps) {
 }
 
 export function Dashboard() {
-  const modules = navigationItems.filter((item) => item.to !== '/')
   const [kpis, setKpis] = useState<DashboardKpis>(emptyKpis)
   const [alerts, setAlerts] = useState<AlertItem[]>([])
   const [events, setEvents] = useState<Event[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
-  const priorityActions = buildPriorityActions(kpis, alerts)
-  const criticalEventsCount = events.filter(
-    (event) => event.severity === 'critical',
+  const [userLabel, setUserLabel] = useState('there')
+  const recentActivity = sortEvents(events).slice(0, 5)
+  const criticalAttentionCount = alerts.filter(
+    (alert) => alert.severity === 'critical',
   ).length
-  const warningEventsCount = events.filter(
-    (event) => event.severity === 'warning',
+  const warningAttentionCount = alerts.filter(
+    (alert) => alert.severity === 'warning',
   ).length
-  const timelineEvents = sortEvents(events).slice(0, 10)
-  const timelineGroups = groupEvents(timelineEvents)
 
   useEffect(() => {
     let isCancelled = false
@@ -603,6 +586,10 @@ export function Dashboard() {
             setIsLoading(false)
           }
           return
+        }
+
+        if (!isCancelled) {
+          setUserLabel(getDashboardUserLabel(session.user.email))
         }
 
         const [nextKpis, nextAlerts, nextEvents] = await Promise.all([
@@ -644,29 +631,29 @@ export function Dashboard() {
     {
       label: 'Open tickets',
       value: isLoading ? '...' : String(kpis.openTickets),
-      helper: 'Issues still active across operations.',
+      helper: 'Active incidents across operations.',
     },
     {
       label: 'Critical tickets',
       value: isLoading ? '...' : String(kpis.criticalTickets),
-      helper: 'Immediate incidents requiring escalation.',
+      helper: 'Escalations needing immediate coordination.',
     },
     {
       label: 'Today expenses',
       value: isLoading ? '...' : formatCurrency(kpis.todayExpenses),
-      helper: 'Approved and submitted cash activity for today.',
+      helper: 'Spend recorded today across operations.',
     },
     {
       label: 'Active vendors',
       value: isLoading ? '...' : String(kpis.activeVendors),
-      helper: 'Partners currently available in the directory.',
+      helper: 'Operational partners currently active.',
     },
   ]
 
   return (
     <PageSection
-      title="Dashboard"
-      description="Live snapshot of operations activity, vendor follow-up, and today’s spend across the property."
+      title={`Good morning, ${userLabel}`}
+      description="Here’s what needs your attention today."
     >
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {kpiCards.map((card) => (
@@ -679,51 +666,6 @@ export function Dashboard() {
         ))}
       </div>
 
-      {!isLoading && !errorMessage ? (
-        <SurfaceCard
-          title="Control strip"
-          description="Unified operational signal count across maintenance, spend, and guest feedback."
-        >
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="rounded-2xl border border-slate-200 bg-white/70 px-4 py-4">
-              <p className="text-2xl font-semibold tracking-tight text-slate-950">
-                {criticalEventsCount}
-              </p>
-              <p className="mt-1 text-sm font-semibold text-slate-700">
-                Critical signals
-              </p>
-            </div>
-
-            <div className="rounded-2xl border border-slate-200 bg-white/70 px-4 py-4">
-              <p className="text-2xl font-semibold tracking-tight text-slate-950">
-                {warningEventsCount}
-              </p>
-              <p className="mt-1 text-sm font-semibold text-slate-700">
-                Warning signals
-              </p>
-            </div>
-          </div>
-        </SurfaceCard>
-      ) : null}
-
-      {!isLoading && !errorMessage && priorityActions.length > 0 ? (
-        <SurfaceCard
-          title="Priority actions"
-          description="Immediate operational issues requiring attention."
-        >
-          <ul className="space-y-2">
-            {priorityActions.map((action, index) => (
-              <li
-                key={index}
-                className="text-sm font-medium text-red-600"
-              >
-                🚨 {action}
-              </li>
-            ))}
-          </ul>
-        </SurfaceCard>
-      ) : null}
-
       {errorMessage ? (
         <SurfaceCard
           title="Live data unavailable"
@@ -733,21 +675,44 @@ export function Dashboard() {
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
         <SurfaceCard
-          title="Alerts"
-          description="Signals that need action before they become guest-facing issues."
+          title="Requires attention"
+          description={
+            alerts.length > 0
+              ? `${criticalAttentionCount} critical · ${warningAttentionCount} warning`
+              : 'No active blockers across maintenance, expenses, or reputation.'
+          }
           className="h-full"
         >
           {isLoading ? (
-            <p className="text-sm text-slate-600">Loading alerts...</p>
+            <p className="text-sm text-slate-600">Loading action queue...</p>
           ) : alerts.length > 0 ? (
-            <ul className="space-y-3">
+            <div className="divide-y divide-slate-100">
               {alerts.map((alert) => (
-                <li key={alert.id} className="text-sm leading-7 text-slate-700">
-                  <span className="mr-2 text-amber-500">⚠️</span>
-                  {alert.message}
-                </li>
+                <Link
+                  key={alert.id}
+                  to={alert.href}
+                  className="grid gap-2 py-3 transition-colors hover:bg-slate-50/80 md:grid-cols-[auto_minmax(0,1fr)_auto_auto] md:items-center"
+                >
+                  <span className="inline-flex rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-600">
+                    {formatEventType(alert.type)}
+                  </span>
+                  <p className="text-sm font-medium text-slate-900">
+                    {alert.message}
+                  </p>
+                  <span
+                    className={[
+                      'inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.18em]',
+                      getSeverityToneClasses(alert.severity),
+                    ].join(' ')}
+                  >
+                    {getSeverityLabel(alert.severity)}
+                  </span>
+                  <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                    {alert.state}
+                  </span>
+                </Link>
               ))}
-            </ul>
+            </div>
           ) : (
             <p className="text-sm leading-7 text-slate-600">
               All operations under control
@@ -756,82 +721,54 @@ export function Dashboard() {
         </SurfaceCard>
 
         <SurfaceCard
-          title="Operational timeline"
-          description="Latest events grouped by entity to surface active incidents and ongoing operational threads."
+          title="Recent activity"
+          description="Latest updates across maintenance, expenses, and guest feedback."
           className="h-full"
         >
           {isLoading ? (
-            <p className="text-sm text-slate-600">Loading timeline...</p>
-          ) : timelineGroups.length > 0 ? (
-            <div className="space-y-5">
-              {timelineGroups.map((group) => (
-                <div key={group.id} className="space-y-3 border-b border-slate-100 pb-4 last:border-0 last:pb-0">
-                  <div className="flex flex-wrap items-center gap-2">
+            <p className="text-sm text-slate-600">Loading activity...</p>
+          ) : recentActivity.length > 0 ? (
+            <div className="divide-y divide-slate-100">
+              {recentActivity.map((event) => (
+                <div
+                  key={event.id}
+                  className="grid gap-2 py-3 md:grid-cols-[auto_minmax(0,1fr)_auto] md:items-center"
+                >
+                  <div className="space-y-2">
                     <span className="inline-flex rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-600">
-                      {group.type}
+                      {formatEventType(event.type)}
                     </span>
-                    <p className="text-sm font-semibold text-slate-900">
-                      {group.entity}
-                    </p>
-                    {group.isIncident ? (
-                      <span className="inline-flex rounded-full bg-red-50 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-red-600">
-                        Incident
-                      </span>
-                    ) : null}
+                    <span
+                      className={[
+                        'inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.18em]',
+                        getSeverityToneClasses(event.severity),
+                      ].join(' ')}
+                    >
+                      {getSeverityLabel(event.severity)}
+                    </span>
                   </div>
 
-                  <div className="relative space-y-3 pl-5">
-                    <span className="absolute bottom-0 left-[7px] top-1 w-px bg-slate-200" />
-                    {group.events.map((event) => (
-                      <div key={event.id} className="relative">
-                        <span className="absolute left-[-20px] top-2.5 h-3 w-3 rounded-full border-2 border-white bg-slate-300 shadow-sm" />
-                        <div className="rounded-2xl bg-white/70 px-4 py-3">
-                          <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
-                            <div className="space-y-2">
-                              <p className="text-sm font-medium text-slate-900">
-                                {event.label}
-                              </p>
-                              <span
-                                className={[
-                                  'inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.18em]',
-                                  getSeverityToneClasses(event.severity),
-                                ].join(' ')}
-                              >
-                                {getSeverityLabel(event.severity)}
-                              </span>
-                            </div>
-                            <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-                              {formatActivityTime(event.timestamp)}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium text-slate-900">
+                      {event.label}
+                    </p>
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                      {event.entity}
+                    </p>
                   </div>
+
+                  <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                    {formatActivityTime(event.timestamp)}
+                  </span>
                 </div>
               ))}
             </div>
           ) : (
             <p className="text-sm leading-7 text-slate-600">
-              No operational timeline events recorded yet.
+              No recent operations activity recorded yet.
             </p>
           )}
         </SurfaceCard>
-      </div>
-
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {modules.map(({ description, icon: Icon, label, to }) => (
-          <Link key={to} to={to}>
-            <SurfaceCard title={label} description={description} className="h-full">
-              <div className="flex items-center justify-between">
-                <span className="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-100 text-slate-700">
-                  <Icon className="h-5 w-5" />
-                </span>
-                <ArrowUpRight className="h-4 w-4 text-slate-400" />
-              </div>
-            </SurfaceCard>
-          </Link>
-        ))}
       </div>
     </PageSection>
   )

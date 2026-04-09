@@ -68,7 +68,7 @@ export function VendorDetail() {
   return (
     <PageSection title={pageTitle} description={pageDescription}>
       <Link
-        to="/vendors"
+        to="/app/vendors"
         className="inline-flex items-center gap-2 text-sm font-medium text-slate-600 hover:text-slate-950"
       >
         <ArrowLeft className="h-4 w-4" />

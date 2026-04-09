@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import { PageSection } from '../components/ui/PageSection'
 import { SurfaceCard } from '../components/ui/SurfaceCard'
 import { isSupabaseConfigured, supabase } from '../lib/supabase'
@@ -8,6 +8,10 @@ type ExpenseStatus = 'draft' | 'submitted' | 'approved' | 'rejected' | 'reimburs
 interface ExpenseCategoryRow {
   id: string
   name: string
+}
+
+interface OrganizationProfileRow {
+  organization_id: string | null
 }
 
 interface ExpenseRecord {
@@ -35,24 +39,12 @@ function getMonthPrefix(date: Date) {
   return `${year}-${month}`
 }
 
-function getPreviousMonthPrefix(date: Date) {
-  return getMonthPrefix(new Date(date.getFullYear(), date.getMonth() - 1, 1))
-}
-
 function getAmountValue(expense: ExpenseRecord) {
   return Number(expense.amount ?? 0)
 }
 
 function isFlagged(expense: ExpenseRecord) {
   return getAmountValue(expense) > 200
-}
-
-function calculateDelta(current: number, previous: number) {
-  if (previous === 0) {
-    return current > 0 ? 100 : 0
-  }
-
-  return ((current - previous) / previous) * 100
 }
 
 function formatCurrency(value: number, currencyCode = 'EUR') {
@@ -85,15 +77,12 @@ function getStatusLabel(status: ExpenseStatus) {
 interface ExpenseKpis {
   todaySpend: number
   monthlySpend: number
-  delta: number
-  flaggedExpensesCount: number
 }
 
 function buildExpenseKpis(expenses: ExpenseRecord[]): ExpenseKpis {
   const now = new Date()
   const today = getLocalDateString(now)
   const currentMonthPrefix = getMonthPrefix(now)
-  const previousMonthPrefix = getPreviousMonthPrefix(now)
 
   const todaySpend = expenses
     .filter((expense) => expense.expense_date === today)
@@ -103,16 +92,16 @@ function buildExpenseKpis(expenses: ExpenseRecord[]): ExpenseKpis {
     .filter((expense) => expense.expense_date.startsWith(currentMonthPrefix))
     .reduce((sum, expense) => sum + getAmountValue(expense), 0)
 
-  const previousMonthSpend = expenses
-    .filter((expense) => expense.expense_date.startsWith(previousMonthPrefix))
-    .reduce((sum, expense) => sum + getAmountValue(expense), 0)
-
   return {
     todaySpend,
     monthlySpend,
-    delta: calculateDelta(monthlySpend, previousMonthSpend),
-    flaggedExpensesCount: expenses.filter(isFlagged).length,
   }
+}
+
+interface ExpenseFormState {
+  label: string
+  amount: string
+  expenseCategoryId: string
 }
 
 interface ExpenseKpiCardProps {
@@ -139,9 +128,17 @@ function ExpenseKpiCard({ label, value, helper }: ExpenseKpiCardProps) {
 
 export function Expenses() {
   const [expenses, setExpenses] = useState<ExpenseRecord[]>([])
+  const [categories, setCategories] = useState<ExpenseCategoryRow[]>([])
   const [categoryMap, setCategoryMap] = useState<Map<string, string>>(new Map())
   const [isLoading, setIsLoading] = useState(true)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  const [isModalOpen, setIsModalOpen] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [formState, setFormState] = useState<ExpenseFormState>({
+    label: '',
+    amount: '',
+    expenseCategoryId: '',
+  })
 
   useEffect(() => {
     let isCancelled = false
@@ -201,6 +198,7 @@ export function Expenses() {
 
         if (!isCancelled) {
           setExpenses((expenseRows as ExpenseRecord[] | null) ?? [])
+          setCategories((categoryRows as ExpenseCategoryRow[] | null) ?? [])
           setCategoryMap(
             new Map(
               ((categoryRows as ExpenseCategoryRow[] | null) ?? []).map((category) => [
@@ -241,60 +239,134 @@ export function Expenses() {
       new Date(right.expense_date).getTime() - new Date(left.expense_date).getTime(),
   )
 
+  async function handleCreateExpense(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+
+    if (!supabase) {
+      setErrorMessage(
+        'Supabase env missing. Fill VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to load live expenses data.',
+      )
+      return
+    }
+
+    const label = formState.label.trim()
+    const amount = Number(formState.amount)
+
+    if (!label || !formState.expenseCategoryId || Number.isNaN(amount) || amount <= 0) {
+      setErrorMessage('Enter a label, amount, and category to add an expense.')
+      return
+    }
+
+    setIsSubmitting(true)
+    setErrorMessage(null)
+
+    try {
+      const {
+        data: { session },
+        error: sessionError,
+      } = await supabase.auth.getSession()
+
+      if (sessionError) {
+        throw sessionError
+      }
+
+      if (!session) {
+        throw new Error('Sign in to add an expense.')
+      }
+
+      const { data: profileRow, error: profileError } = await supabase
+        .from('profiles')
+        .select('organization_id')
+        .eq('id', session.user.id)
+        .maybeSingle()
+
+      if (profileError) {
+        throw profileError
+      }
+
+      const organizationId = (profileRow as OrganizationProfileRow | null)?.organization_id
+
+      if (!organizationId) {
+        throw new Error('Your profile is not linked to an organization.')
+      }
+
+      const { data: insertedExpense, error: insertError } = await supabase
+        .from('cash_expenses')
+        .insert({
+          organization_id: organizationId,
+          expense_category_id: formState.expenseCategoryId,
+          description: label,
+          amount,
+          expense_date: getLocalDateString(new Date()),
+        })
+        .select(
+          'id, expense_category_id, expense_date, amount, currency_code, description, status',
+        )
+        .single()
+
+      if (insertError) {
+        throw insertError
+      }
+
+      setExpenses((currentExpenses) => [insertedExpense as ExpenseRecord, ...currentExpenses])
+      setFormState({
+        label: '',
+        amount: '',
+        expenseCategoryId: categories[0]?.id ?? '',
+      })
+      setIsModalOpen(false)
+    } catch (error) {
+      console.error('Unable to create expense', error)
+      setErrorMessage(
+        error instanceof Error ? error.message : 'Unable to create the expense right now.',
+      )
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  function openExpenseModal() {
+    setErrorMessage(null)
+    setFormState({
+      label: '',
+      amount: '',
+      expenseCategoryId: categories[0]?.id ?? '',
+    })
+    setIsModalOpen(true)
+  }
+
   return (
     <PageSection
       title="Expenses"
-      description="Live financial control view for today’s spend, monthly pace, and approvals requiring attention."
+      description="Lightweight control surface for operational expenses and approval-sensitive spend."
     >
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <ExpenseKpiCard
-          label="Today spend"
-          value={isLoading ? '...' : formatCurrency(kpis.todaySpend, primaryCurrencyCode)}
-          helper="Cash and card activity recorded today."
-        />
-        <ExpenseKpiCard
-          label="Monthly spend"
-          value={isLoading ? '...' : formatCurrency(kpis.monthlySpend, primaryCurrencyCode)}
-          helper="Current month expense run rate."
-        />
-        <ExpenseKpiCard
-          label="Delta vs last month"
-          value={isLoading ? '...' : `${kpis.delta >= 0 ? '+' : ''}${Math.round(kpis.delta)}%`}
-          helper="Relative spend shift versus the prior month."
-        />
-        <ExpenseKpiCard
-          label="Flagged expenses"
-          value={isLoading ? '...' : String(kpis.flaggedExpensesCount)}
-          helper="High-value items requiring closer review."
-        />
+      <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+        <div className="grid flex-1 gap-4 md:grid-cols-2">
+          <ExpenseKpiCard
+            label="Today spend"
+            value={isLoading ? '...' : formatCurrency(kpis.todaySpend, primaryCurrencyCode)}
+            helper="Operational expenses recorded today."
+          />
+          <ExpenseKpiCard
+            label="This month"
+            value={isLoading ? '...' : formatCurrency(kpis.monthlySpend, primaryCurrencyCode)}
+            helper="Operational spend recorded this month."
+          />
+        </div>
+
+        <button
+          type="button"
+          onClick={openExpenseModal}
+          disabled={!isSupabaseConfigured || categories.length === 0}
+          className="inline-flex min-h-11 items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 shadow-shell transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          Add expense
+        </button>
       </div>
 
-      {!isLoading &&
-      !errorMessage &&
-      (kpis.flaggedExpensesCount > 0 || kpis.delta > 20) ? (
-        <SurfaceCard
-          title="Financial alerts"
-          description="Operational spending signals that need review."
-        >
-          <div className="space-y-2">
-            {kpis.flaggedExpensesCount > 0 ? (
-              <p className="text-sm font-medium text-amber-700">
-                ⚠️ {kpis.flaggedExpensesCount} flagged {kpis.flaggedExpensesCount > 1 ? 'expenses require' : 'expense requires'} approval
-              </p>
-            ) : null}
-
-            {kpis.delta > 20 ? (
-              <p className="text-sm font-medium text-amber-700">
-                ⚠️ Monthly spend is up {Math.round(kpis.delta)}% versus last month
-              </p>
-            ) : null}
-          </div>
-        </SurfaceCard>
-      ) : null}
-
       <SurfaceCard
-        title="Expense control"
-        description="Recent operational spend with approval signals and category context."
+        title="Operational expenses"
+        description="Compact register of spend by date, label, category, amount, and current status."
       >
         {isLoading ? (
           <p className="text-sm leading-7 text-slate-600">Loading expenses...</p>
@@ -309,59 +381,177 @@ export function Expenses() {
         ) : null}
 
         {!isLoading && !errorMessage && sortedExpenses.length > 0 ? (
-          <div className="space-y-3">
-            {sortedExpenses.map((expense) => {
-              const flagged = isFlagged(expense)
-              const categoryName =
-                categoryMap.get(expense.expense_category_id) ?? 'Uncategorized'
+          <div className="overflow-x-auto">
+            <table className="min-w-full border-separate border-spacing-0">
+              <thead>
+                <tr className="text-left">
+                  <th className="border-b border-slate-200 px-0 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                    Date
+                  </th>
+                  <th className="border-b border-slate-200 px-0 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                    Label
+                  </th>
+                  <th className="border-b border-slate-200 px-0 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                    Amount
+                  </th>
+                  <th className="border-b border-slate-200 px-0 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                    Status
+                  </th>
+                </tr>
+              </thead>
 
-              return (
-                <div
-                  key={expense.id}
-                  className={[
-                    'rounded-3xl border p-5 transition-colors',
-                    flagged
-                      ? 'border-amber-200 bg-amber-50/30'
-                      : 'border-slate-200 bg-white/80',
-                  ].join(' ')}
-                >
-                  <div className="flex flex-col gap-4">
-                    <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                      <div className="space-y-2">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <h2 className="text-lg font-semibold tracking-tight text-slate-950">
+              <tbody>
+                {sortedExpenses.map((expense) => {
+                  const flagged = isFlagged(expense)
+                  const categoryName =
+                    categoryMap.get(expense.expense_category_id) ?? 'Uncategorized'
+
+                  return (
+                    <tr
+                      key={expense.id}
+                      className={flagged ? 'bg-amber-50/30' : undefined}
+                    >
+                      <td className="border-b border-slate-100 py-4 pr-6 text-sm text-slate-600">
+                        {formatExpenseDate(expense.expense_date)}
+                      </td>
+                      <td className="border-b border-slate-100 py-4 pr-6">
+                        <div className="space-y-1">
+                          <p className="text-sm font-medium text-slate-900">
                             {expense.description}
-                          </h2>
-                          <span className="rounded-full bg-white/80 px-2.5 py-1 text-xs font-semibold text-slate-600">
+                          </p>
+                          <p className="text-xs font-medium uppercase tracking-[0.16em] text-slate-500">
                             {categoryName}
-                          </span>
-                          <span className="rounded-full bg-white/80 px-2.5 py-1 text-xs font-semibold capitalize text-slate-600">
+                          </p>
+                        </div>
+                      </td>
+                      <td className="border-b border-slate-100 py-4 pr-6 text-sm font-semibold text-slate-900">
+                        {formatCurrency(getAmountValue(expense), expense.currency_code)}
+                      </td>
+                      <td className="border-b border-slate-100 py-4">
+                        <div className="space-y-1">
+                          <span className="inline-flex rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold capitalize text-slate-600">
                             {getStatusLabel(expense.status)}
                           </span>
+                          {flagged ? (
+                            <p className="text-xs font-medium text-amber-700">
+                              Requires approval
+                            </p>
+                          ) : null}
                         </div>
-
-                        <p className="text-sm leading-6 text-slate-600">
-                          {formatExpenseDate(expense.expense_date)}
-                        </p>
-                      </div>
-
-                      <div className="text-lg font-semibold tracking-tight text-slate-950">
-                        {formatCurrency(getAmountValue(expense), expense.currency_code)}
-                      </div>
-                    </div>
-
-                    {flagged ? (
-                      <div className="text-sm font-medium text-amber-700">
-                        Requires approval
-                      </div>
-                    ) : null}
-                  </div>
-                </div>
-              )
-            })}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
           </div>
         ) : null}
       </SurfaceCard>
+
+      {isModalOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/25 px-4 py-6 backdrop-blur-sm">
+          <div className="w-full max-w-lg">
+            <SurfaceCard
+              title="Add expense"
+              description="Log a new operational expense with the minimum details required."
+            >
+              <form className="space-y-4" onSubmit={handleCreateExpense}>
+                <div className="space-y-2">
+                  <label
+                    htmlFor="expense-label"
+                    className="text-sm font-semibold text-slate-700"
+                  >
+                    Label
+                  </label>
+                  <input
+                    id="expense-label"
+                    type="text"
+                    value={formState.label}
+                    onChange={(event) =>
+                      setFormState((currentState) => ({
+                        ...currentState,
+                        label: event.target.value,
+                      }))
+                    }
+                    className="min-h-11 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-slate-300 focus:ring-2 focus:ring-slate-200"
+                    placeholder="Room relocation taxi"
+                  />
+                </div>
+
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <label
+                      htmlFor="expense-amount"
+                      className="text-sm font-semibold text-slate-700"
+                    >
+                      Amount
+                    </label>
+                    <input
+                      id="expense-amount"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={formState.amount}
+                      onChange={(event) =>
+                        setFormState((currentState) => ({
+                          ...currentState,
+                          amount: event.target.value,
+                        }))
+                      }
+                      className="min-h-11 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-slate-300 focus:ring-2 focus:ring-slate-200"
+                      placeholder="0.00"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <label
+                      htmlFor="expense-category"
+                      className="text-sm font-semibold text-slate-700"
+                    >
+                      Category
+                    </label>
+                    <select
+                      id="expense-category"
+                      value={formState.expenseCategoryId}
+                      onChange={(event) =>
+                        setFormState((currentState) => ({
+                          ...currentState,
+                          expenseCategoryId: event.target.value,
+                        }))
+                      }
+                      className="min-h-11 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-slate-300 focus:ring-2 focus:ring-slate-200"
+                    >
+                      <option value="">Select category</option>
+                      {categories.map((category) => (
+                        <option key={category.id} value={category.id}>
+                          {category.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-3 pt-2 md:flex-row md:justify-end">
+                  <button
+                    type="button"
+                    onClick={() => setIsModalOpen(false)}
+                    className="inline-flex min-h-11 items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSubmitting || categories.length === 0}
+                    className="inline-flex min-h-11 items-center justify-center rounded-2xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {isSubmitting ? 'Saving...' : 'Save expense'}
+                  </button>
+                </div>
+              </form>
+            </SurfaceCard>
+          </div>
+        </div>
+      ) : null}
     </PageSection>
   )
 }

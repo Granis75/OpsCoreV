@@ -1,21 +1,75 @@
-import { DatabaseZap, ShieldCheck } from 'lucide-react'
+import { useState } from 'react'
+import type { Session } from '@supabase/supabase-js'
+import { LogOut } from 'lucide-react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { navigationItems } from '../../data/navigation'
-import { isSupabaseConfigured } from '../../lib/supabase'
+import { supabase } from '../../lib/supabase'
 
 function isActivePath(pathname: string, target: string) {
-  if (target === '/') {
-    return pathname === '/'
+  if (target === '/app') {
+    return pathname === '/app'
   }
 
   return pathname.startsWith(target)
 }
 
-export function AppShell() {
+function getDisplayEmail(email: string | null | undefined) {
+  if (!email) {
+    return 'workspace@user'
+  }
+
+  if (email.length <= 28) {
+    return email
+  }
+
+  return `${email.slice(0, 25)}...`
+}
+
+function getDisplayName(email: string | null | undefined) {
+  if (!email) {
+    return 'Workspace user'
+  }
+
+  const [localPart] = email.split('@')
+  const cleaned = localPart.replace(/[._-]+/g, ' ').trim()
+
+  if (!cleaned) {
+    return email
+  }
+
+  return cleaned.replace(/\b\w/g, (letter) => letter.toUpperCase())
+}
+
+function getAvatarLabel(email: string | null | undefined) {
+  if (!email) {
+    return 'W'
+  }
+
+  return email.charAt(0).toUpperCase()
+}
+
+interface AppShellProps {
+  session: Session | null
+}
+
+export function AppShell({ session }: AppShellProps) {
   const location = useLocation()
+  const [isSigningOut, setIsSigningOut] = useState(false)
   const currentItem =
     navigationItems.find((item) => isActivePath(location.pathname, item.to)) ??
     navigationItems[0]
+  const userEmail = session?.user.email
+  const userName = getDisplayName(userEmail)
+
+  async function handleSignOut() {
+    if (!supabase) {
+      return
+    }
+
+    setIsSigningOut(true)
+    await supabase.auth.signOut()
+    setIsSigningOut(false)
+  }
 
   return (
     <div className="min-h-screen">
@@ -30,10 +84,10 @@ export function AppShell() {
                 Ops Core V12
               </p>
               <p className="text-xl font-semibold tracking-tight text-slate-950">
-                Product workspace
+                Operational workspace
               </p>
               <p className="text-sm leading-6 text-slate-600">
-                Base frontend prete pour brancher les modules operations.
+                Shared control surface for incidents, vendors, spend, and guest quality.
               </p>
             </div>
           </div>
@@ -43,7 +97,7 @@ export function AppShell() {
               <NavLink
                 key={to}
                 to={to}
-                end={to === '/'}
+                end={to === '/app'}
                 className={({ isActive }) =>
                   [
                     'flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-medium transition-colors',
@@ -58,19 +112,6 @@ export function AppShell() {
               </NavLink>
             ))}
           </nav>
-
-          <div className="mt-6 rounded-3xl border border-slate-200 bg-slate-50 p-5">
-            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">
-              Stack active
-            </p>
-            <ul className="mt-4 space-y-2 text-sm text-slate-600">
-              <li>React 19 + TypeScript</li>
-              <li>Vite 8</li>
-              <li>Tailwind CSS</li>
-              <li>React Router</li>
-              <li>Supabase client</li>
-            </ul>
-          </div>
         </aside>
 
         <div className="flex min-h-screen min-w-0 flex-1 flex-col">
@@ -87,24 +128,29 @@ export function AppShell() {
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2">
-                  <span
-                    className={[
-                      'inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium',
-                      isSupabaseConfigured
-                        ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-                        : 'border-amber-200 bg-amber-50 text-amber-700',
-                    ].join(' ')}
-                  >
-                    <DatabaseZap className="h-3.5 w-3.5" />
-                    {isSupabaseConfigured
-                      ? 'Supabase env configured'
-                      : 'Supabase env missing'}
-                  </span>
+                  <div className="inline-flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700">
+                    <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-slate-950 text-xs font-semibold text-white">
+                      {getAvatarLabel(userEmail)}
+                    </span>
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium text-slate-900">
+                        {userName}
+                      </p>
+                      <p className="truncate text-xs text-slate-500">
+                        {getDisplayEmail(userEmail)}
+                      </p>
+                    </div>
+                  </div>
 
-                  <span className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700">
-                    <ShieldCheck className="h-3.5 w-3.5" />
-                    Frontend shell ready
-                  </span>
+                  <button
+                    type="button"
+                    onClick={() => void handleSignOut()}
+                    disabled={isSigningOut}
+                    className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    <LogOut className="h-3.5 w-3.5" />
+                    {isSigningOut ? 'Signing out...' : 'Logout'}
+                  </button>
                 </div>
               </div>
 
@@ -116,7 +162,7 @@ export function AppShell() {
                   <NavLink
                     key={to}
                     to={to}
-                    end={to === '/'}
+                    end={to === '/app'}
                     className={({ isActive }) =>
                       [
                         'whitespace-nowrap rounded-full border px-3 py-2 text-sm font-medium transition-colors',

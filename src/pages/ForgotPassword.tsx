@@ -3,10 +3,10 @@ import { Link } from 'react-router-dom'
 import { SurfaceCard } from '../components/ui/SurfaceCard'
 import { isSupabaseConfigured, supabase } from '../lib/supabase'
 
-export function Login() {
+export function ForgotPassword() {
   const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  const [infoMessage, setInfoMessage] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -19,16 +19,26 @@ export function Login() {
       return
     }
 
+    if (!email.trim()) {
+      setErrorMessage('Enter your email address to receive a password reset link.')
+      setInfoMessage(null)
+      return
+    }
+
     setIsSubmitting(true)
     setErrorMessage(null)
+    setInfoMessage(null)
 
-    const { error } = await supabase.auth.signInWithPassword({
-      email: email.trim(),
-      password,
+    const redirectTo = new URL('/reset-password', window.location.origin).toString()
+
+    const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+      redirectTo,
     })
 
     if (error) {
       setErrorMessage(error.message)
+    } else {
+      setInfoMessage(`Password reset email sent to ${email.trim()}.`)
     }
 
     setIsSubmitting(false)
@@ -38,8 +48,8 @@ export function Login() {
     <div className="min-h-screen bg-slate-50/60 px-5 py-10 md:px-8">
       <div className="mx-auto flex min-h-[calc(100vh-5rem)] max-w-xl items-center">
         <SurfaceCard
-          title="Sign in"
-          description="Use your Ops Core credentials to open the operational workspace."
+          title="Forgot password"
+          description="Request a secure password reset link for your Ops Core account."
           className="w-full"
         >
           <div className="mb-6 space-y-1">
@@ -47,7 +57,7 @@ export function Login() {
               Ops Core V12
             </p>
             <p className="text-sm leading-6 text-slate-600">
-              Sign in to continue with today’s incidents, spend, and guest feedback.
+              We’ll send a reset link so you can get back to the workspace quickly.
             </p>
           </div>
 
@@ -66,22 +76,12 @@ export function Login() {
               />
             </label>
 
-            <label className="block space-y-2">
-              <span className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
-                Password
-              </span>
-              <input
-                type="password"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                autoComplete="current-password"
-                required
-                className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none"
-              />
-            </label>
-
             {errorMessage ? (
               <p className="text-sm text-rose-600">{errorMessage}</p>
+            ) : null}
+
+            {infoMessage ? (
+              <p className="text-sm text-emerald-700">{infoMessage}</p>
             ) : null}
 
             {!isSupabaseConfigured ? (
@@ -95,20 +95,15 @@ export function Login() {
               disabled={isSubmitting || !isSupabaseConfigured}
               className="inline-flex w-full items-center justify-center rounded-2xl bg-slate-950 px-4 py-3 text-sm font-medium text-white transition-opacity disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {isSubmitting ? 'Signing in...' : 'Sign in'}
+              {isSubmitting ? 'Sending reset email...' : 'Send reset email'}
             </button>
 
-            <div className="flex flex-col gap-2 text-sm text-slate-600 md:flex-row md:items-center md:justify-between">
-              <Link to="/forgot-password" className="font-medium text-slate-950">
-                Forgot password?
+            <p className="text-sm text-slate-600">
+              Back to{' '}
+              <Link to="/sign-in" className="font-medium text-slate-950">
+                sign in
               </Link>
-              <span>
-                New here?{' '}
-                <Link to="/sign-up" className="font-medium text-slate-950">
-                  Create account
-                </Link>
-              </span>
-            </div>
+            </p>
           </form>
         </SurfaceCard>
       </div>

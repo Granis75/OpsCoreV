@@ -123,13 +123,22 @@ export function ResetPassword() {
   }
 
   return (
-    <div className="min-h-screen px-5 py-10 md:px-8">
+    <div className="min-h-screen bg-slate-50/60 px-5 py-10 md:px-8">
       <div className="mx-auto flex min-h-[calc(100vh-5rem)] max-w-xl items-center">
         <SurfaceCard
           title="Reset password"
           description="Set a new password for your Ops Core account."
           className="w-full"
         >
+          <div className="mb-6 space-y-1">
+            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">
+              Ops Core V12
+            </p>
+            <p className="text-sm leading-6 text-slate-600">
+              Finish recovery and return to the operational workspace.
+            </p>
+          </div>
+
           {isCheckingRecovery ? (
             <p className="text-sm text-slate-600">Checking your password reset session...</p>
           ) : null}
@@ -138,7 +147,7 @@ export function ResetPassword() {
             <div className="space-y-4">
               <p className="text-sm text-rose-600">{errorMessage}</p>
               <Link
-                to="/login"
+                to="/sign-in"
                 className="inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700"
               >
                 Back to sign in
@@ -194,7 +203,7 @@ export function ResetPassword() {
 
               {successMessage ? (
                 <Link
-                  to="/vendors"
+                  to="/app/vendors"
                   className="inline-flex w-full items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700"
                 >
                   Continue to vendors

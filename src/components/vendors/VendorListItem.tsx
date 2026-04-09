@@ -10,7 +10,7 @@ interface VendorListItemProps {
 export function VendorListItem({ vendor }: VendorListItemProps) {
   return (
     <Link
-      to={`/vendors/${vendor.id}`}
+      to={`/app/vendors/${vendor.id}`}
       className="block rounded-3xl border border-white/70 bg-white/80 p-5 shadow-shell transition-colors hover:border-slate-300"
     >
       <div className="flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
