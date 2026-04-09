@@ -129,11 +129,11 @@ function getItemSurfaceClasses(priority: OperationItemPriority) {
 
 function getPriorityBadgeClasses(priority: OperationItemPriority) {
   if (priority === 'critical') {
-    return 'bg-red-50 text-red-700'
+    return 'bg-red-50 text-red-600'
   }
 
   if (priority === 'high') {
-    return 'bg-amber-50 text-amber-700'
+    return 'bg-amber-50 text-amber-600'
   }
 
   return 'bg-slate-100 text-slate-600'
@@ -276,10 +276,10 @@ function OperationsKpiCard({ label, value }: OperationsKpiCardProps) {
   return (
     <div className="rounded-3xl border border-white/70 bg-white/80 p-5 shadow-shell backdrop-blur">
       <div className="space-y-2">
-        <p className="text-2xl font-semibold tracking-tight text-slate-950 md:text-3xl">
+        <p className="text-3xl font-semibold tracking-tight text-slate-950">
           {value}
         </p>
-        <p className="text-sm font-semibold text-slate-700">{label}</p>
+        <p className="text-sm text-slate-600">{label}</p>
       </div>
     </div>
   )
@@ -294,19 +294,19 @@ function OperationQueueItem({ item, onEdit }: OperationQueueItemProps) {
   return (
     <div
       className={[
-        'rounded-2xl border px-4 py-3 transition-colors',
+        'rounded-2xl border px-3.5 py-3 transition-colors',
         getItemSurfaceClasses(item.priority),
       ].join(' ')}
     >
       <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-start">
         <div className="min-w-0 space-y-2">
           <div className="flex flex-wrap items-center gap-1.5">
-            <span className="inline-flex rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold uppercase tracking-[0.14em] text-slate-600">
+            <span className="inline-flex rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.2em] text-slate-600">
               {typeLabels[item.type]}
             </span>
             <span
               className={[
-                'inline-flex rounded-full px-2.5 py-1 text-xs font-semibold uppercase tracking-[0.14em]',
+                'inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.2em]',
                 getPriorityBadgeClasses(item.priority),
               ].join(' ')}
             >
@@ -314,7 +314,7 @@ function OperationQueueItem({ item, onEdit }: OperationQueueItemProps) {
             </span>
             <span
               className={[
-                'inline-flex rounded-full px-2.5 py-1 text-xs font-semibold',
+                'inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.2em]',
                 getStatusBadgeClasses(item.status),
               ].join(' ')}
             >
@@ -322,29 +322,33 @@ function OperationQueueItem({ item, onEdit }: OperationQueueItemProps) {
             </span>
           </div>
 
-          <div className="space-y-1">
+          <div className="space-y-1.5">
             <h2 className="text-sm font-semibold tracking-tight text-slate-950 md:text-base">
               {item.title}
             </h2>
             {item.location ? (
-              <p className="text-sm text-slate-600">{item.location}</p>
+              <p className="text-[11px] uppercase tracking-[0.24em] text-slate-400">
+                {item.location}
+              </p>
             ) : null}
             {item.notes ? (
-              <p className="text-sm leading-6 text-slate-500">{item.notes}</p>
+              <p className="text-sm text-slate-600">{item.notes}</p>
             ) : null}
           </div>
         </div>
 
         <div className="flex flex-col items-start gap-3 md:items-end">
-          <div className="space-y-1 text-sm text-slate-500 md:text-right">
-            <p className="font-medium text-slate-700">{formatOpenedAgo(item.created_at)}</p>
-            <p>{formatCreatedAt(item.created_at)}</p>
+          <div className="space-y-1 md:text-right">
+            <p className="text-sm text-slate-600">{formatOpenedAgo(item.created_at)}</p>
+            <p className="text-[11px] uppercase tracking-[0.24em] text-slate-400">
+              {formatCreatedAt(item.created_at)}
+            </p>
           </div>
 
           <button
             type="button"
             onClick={() => onEdit(item)}
-            className="inline-flex min-h-9 items-center justify-center rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-50"
+            className="inline-flex min-h-8 items-center justify-center rounded-full border border-slate-200 bg-white px-3 py-1 text-[11px] font-medium uppercase tracking-[0.2em] text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-950"
           >
             Edit
           </button>
@@ -579,7 +583,7 @@ export function Operations() {
                 onChange={(event) =>
                   setTypeFilter(event.target.value as FilterValue<OperationItemType>)
                 }
-                className="min-h-11 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-slate-300 focus:ring-2 focus:ring-slate-200"
+                className="min-h-11 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-950 outline-none transition-colors focus:border-slate-950"
               >
                 <option value="all">All types</option>
                 <option value="ticket">Tickets</option>
@@ -593,7 +597,7 @@ export function Operations() {
                 onChange={(event) =>
                   setStatusFilter(event.target.value as FilterValue<OperationItemStatus>)
                 }
-                className="min-h-11 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-slate-300 focus:ring-2 focus:ring-slate-200"
+                className="min-h-11 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-950 outline-none transition-colors focus:border-slate-950"
               >
                 <option value="all">All statuses</option>
                 <option value="open">Open</option>
@@ -606,7 +610,7 @@ export function Operations() {
                 onChange={(event) =>
                   setPriorityFilter(event.target.value as FilterValue<OperationItemPriority>)
                 }
-                className="min-h-11 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-slate-300 focus:ring-2 focus:ring-slate-200"
+                className="min-h-11 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-950 outline-none transition-colors focus:border-slate-950"
               >
                 <option value="all">All priorities</option>
                 <option value="critical">Critical</option>
@@ -619,7 +623,7 @@ export function Operations() {
                 type="search"
                 value={searchQuery}
                 onChange={(event) => setSearchQuery(event.target.value)}
-                className="min-h-11 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-slate-300 focus:ring-2 focus:ring-slate-200"
+                className="min-h-11 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-950 outline-none transition-colors focus:border-slate-950"
                 placeholder="Search title, location, notes"
               />
             </div>
@@ -645,10 +649,10 @@ export function Operations() {
             <div className="rounded-2xl border border-dashed border-slate-200 bg-white/70 px-5 py-5">
               <div className="space-y-4">
                 <div className="space-y-1">
-                  <h2 className="text-sm font-semibold text-slate-900">
+                  <h2 className="text-sm font-semibold tracking-tight text-slate-950">
                     No operational items recorded
                   </h2>
-                  <p className="text-sm leading-6 text-slate-600">
+                  <p className="text-sm text-slate-600">
                     Start by creating a ticket, task, intervention or order.
                   </p>
                 </div>
@@ -696,7 +700,7 @@ export function Operations() {
                   <div className="space-y-2">
                     <label
                       htmlFor="operation-type"
-                      className="text-sm font-semibold text-slate-700"
+                      className="text-[11px] font-medium uppercase tracking-[0.24em] text-slate-400"
                     >
                       Type
                     </label>
@@ -709,7 +713,7 @@ export function Operations() {
                           type: event.target.value as OperationItemType,
                         }))
                       }
-                      className="min-h-11 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-slate-300 focus:ring-2 focus:ring-slate-200"
+                      className="min-h-11 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-950 outline-none transition-colors focus:border-slate-950"
                     >
                       <option value="ticket">Ticket</option>
                       <option value="task">Task</option>
@@ -721,7 +725,7 @@ export function Operations() {
                   <div className="space-y-2">
                     <label
                       htmlFor="operation-priority"
-                      className="text-sm font-semibold text-slate-700"
+                      className="text-[11px] font-medium uppercase tracking-[0.24em] text-slate-400"
                     >
                       Priority
                     </label>
@@ -734,7 +738,7 @@ export function Operations() {
                           priority: event.target.value as OperationItemPriority,
                         }))
                       }
-                      className="min-h-11 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-slate-300 focus:ring-2 focus:ring-slate-200"
+                      className="min-h-11 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-950 outline-none transition-colors focus:border-slate-950"
                     >
                       <option value="critical">Critical</option>
                       <option value="high">High</option>
@@ -746,7 +750,7 @@ export function Operations() {
                   <div className="space-y-2">
                     <label
                       htmlFor="operation-status"
-                      className="text-sm font-semibold text-slate-700"
+                      className="text-[11px] font-medium uppercase tracking-[0.24em] text-slate-400"
                     >
                       Status
                     </label>
@@ -759,7 +763,7 @@ export function Operations() {
                           status: event.target.value as OperationItemStatus,
                         }))
                       }
-                      className="min-h-11 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-slate-300 focus:ring-2 focus:ring-slate-200"
+                      className="min-h-11 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-950 outline-none transition-colors focus:border-slate-950"
                     >
                       <option value="open">Open</option>
                       <option value="in_progress">In progress</option>
@@ -771,7 +775,7 @@ export function Operations() {
                 <div className="space-y-2">
                   <label
                     htmlFor="operation-title"
-                    className="text-sm font-semibold text-slate-700"
+                    className="text-[11px] font-medium uppercase tracking-[0.24em] text-slate-400"
                   >
                     Title
                   </label>
@@ -785,7 +789,7 @@ export function Operations() {
                         title: event.target.value,
                       }))
                     }
-                    className="min-h-11 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-slate-300 focus:ring-2 focus:ring-slate-200"
+                    className="min-h-11 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-950 outline-none transition-colors focus:border-slate-950"
                     placeholder="Room 214 AC follow-up"
                   />
                 </div>
@@ -794,9 +798,9 @@ export function Operations() {
                   <div className="space-y-2">
                     <label
                       htmlFor="operation-location"
-                      className="text-sm font-semibold text-slate-700"
-                    >
-                      Location
+                    className="text-[11px] font-medium uppercase tracking-[0.24em] text-slate-400"
+                  >
+                    Location
                     </label>
                     <input
                       id="operation-location"
@@ -808,7 +812,7 @@ export function Operations() {
                           location: event.target.value,
                         }))
                       }
-                      className="min-h-11 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-slate-300 focus:ring-2 focus:ring-slate-200"
+                      className="min-h-11 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-950 outline-none transition-colors focus:border-slate-950"
                       placeholder="Room 214"
                     />
                   </div>
@@ -816,9 +820,9 @@ export function Operations() {
                   <div className="space-y-2">
                     <label
                       htmlFor="operation-notes"
-                      className="text-sm font-semibold text-slate-700"
-                    >
-                      Notes
+                    className="text-[11px] font-medium uppercase tracking-[0.24em] text-slate-400"
+                  >
+                    Notes
                     </label>
                     <input
                       id="operation-notes"
@@ -830,7 +834,7 @@ export function Operations() {
                           notes: event.target.value,
                         }))
                       }
-                      className="min-h-11 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-slate-300 focus:ring-2 focus:ring-slate-200"
+                      className="min-h-11 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-950 outline-none transition-colors focus:border-slate-950"
                       placeholder="Waiting for vendor confirmation"
                     />
                   </div>

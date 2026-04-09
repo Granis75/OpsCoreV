@@ -354,11 +354,11 @@ function sortExpenseRows(items: ExpenseRow[]) {
 
 function getToneClasses(severity: DashboardSeverity) {
   if (severity === 'critical') {
-    return 'bg-red-50 text-red-700'
+    return 'bg-red-50 text-red-600'
   }
 
   if (severity === 'warning') {
-    return 'bg-amber-50 text-amber-700'
+    return 'bg-amber-50 text-amber-600'
   }
 
   return 'bg-slate-100 text-slate-600'
@@ -713,24 +713,24 @@ function TodaySignalRow({ signal }: TodaySignalRowProps) {
       to={signal.href}
       className="group grid gap-3 rounded-2xl border border-slate-100 px-4 py-3 transition-colors hover:bg-slate-50/80 md:grid-cols-[auto_minmax(0,1fr)_auto_auto] md:items-center"
     >
-      <span className="inline-flex rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-600">
+      <span className="inline-flex rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.2em] text-slate-600">
         {moduleLabels[signal.module]}
       </span>
       <div className="min-w-0">
         <p className="truncate text-sm font-medium text-slate-900">{signal.label}</p>
-        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+        <p className="text-[11px] uppercase tracking-[0.24em] text-slate-400">
           {formatTimestamp(signal.timestamp)}
         </p>
       </div>
       <span
         className={[
-          'inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.18em]',
+          'inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.2em]',
           getToneClasses(signal.severity),
         ].join(' ')}
       >
         {signal.statusLabel}
       </span>
-      <span className="text-sm font-semibold text-slate-700 transition-colors group-hover:text-slate-950">
+      <span className="text-sm text-slate-600 transition-colors group-hover:text-slate-950">
         {signal.ctaLabel}
       </span>
     </Link>
@@ -761,14 +761,14 @@ function QueueBlock({ block }: QueueBlockProps) {
                   <p className="truncate text-sm font-medium text-slate-900">
                     {item.label}
                   </p>
-                  <p className="truncate text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+                  <p className="truncate text-[11px] uppercase tracking-[0.24em] text-slate-400">
                     {item.meta}
                   </p>
                 </div>
                 <div className="flex shrink-0 flex-col items-end gap-1">
                   <span
                     className={[
-                      'inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em]',
+                      'inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.2em]',
                       getToneClasses(item.severity),
                     ].join(' ')}
                   >
@@ -809,12 +809,12 @@ function ActivityRow({ item }: ActivityRowProps) {
       className="group grid gap-2 rounded-2xl border border-slate-100 px-4 py-3 transition-colors hover:bg-slate-50/80 md:grid-cols-[auto_minmax(0,1fr)_auto] md:items-center"
     >
       <div className="flex items-center gap-2">
-        <span className="inline-flex rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-600">
+        <span className="inline-flex rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.2em] text-slate-600">
           {moduleLabels[item.module]}
         </span>
         <span
           className={[
-            'inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.18em]',
+            'inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.2em]',
             getToneClasses(item.severity),
           ].join(' ')}
         >
@@ -824,7 +824,7 @@ function ActivityRow({ item }: ActivityRowProps) {
 
       <p className="truncate text-sm font-medium text-slate-900">{item.label}</p>
 
-      <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500 transition-colors group-hover:text-slate-700">
+      <span className="text-[11px] uppercase tracking-[0.24em] text-slate-400 transition-colors group-hover:text-slate-700">
         {formatTimestamp(item.timestamp)}
       </span>
     </Link>
@@ -844,13 +844,15 @@ function KpiCard({ label, value, helper, href }: KpiCardProps) {
       to={href}
       className="rounded-3xl border border-white/70 bg-white/80 p-5 shadow-shell backdrop-blur transition-colors hover:bg-slate-50/80"
     >
-      <div className="space-y-2">
-        <p className="text-2xl font-semibold tracking-tight text-slate-950 md:text-3xl">
+      <div className="space-y-1.5">
+        <p className="text-3xl font-semibold tracking-tight text-slate-950">
           {value}
         </p>
         <div className="space-y-1">
-          <p className="text-sm font-semibold text-slate-700">{label}</p>
-          <p className="text-xs leading-5 text-slate-500">{helper}</p>
+          <p className="text-sm text-slate-600">{label}</p>
+          <p className="text-[11px] uppercase tracking-[0.24em] text-slate-400">
+            {helper}
+          </p>
         </div>
       </div>
     </Link>

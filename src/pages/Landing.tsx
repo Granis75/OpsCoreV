@@ -22,7 +22,7 @@ const benefits = [
 export function Landing() {
   return (
     <div className="min-h-screen px-5 py-8 md:px-8 md:py-10">
-      <div className="mx-auto max-w-6xl space-y-6">
+      <div className="mx-auto max-w-6xl space-y-8">
         <div className="flex items-center justify-between">
           <div className="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-950 text-sm font-semibold text-white shadow-shell">
             OC
@@ -44,14 +44,14 @@ export function Landing() {
           </div>
         </div>
 
-        <div className="grid gap-4 xl:grid-cols-[minmax(0,1.25fr)_minmax(0,0.75fr)]">
+        <div className="grid gap-4 xl:grid-cols-[minmax(0,1.38fr)_minmax(0,0.62fr)]">
           <SurfaceCard
             title="Operations, made readable."
             description="From fragmented tracking to a clear operational system."
             className="h-full"
           >
-            <div className="space-y-5">
-              <p className="max-w-2xl text-sm leading-7 text-slate-600">
+            <div className="space-y-6">
+              <p className="max-w-2xl text-sm text-slate-600">
                 Ops Core gives teams one place to monitor incidents, operational spend,
                 partners, and guest quality without losing the context of the day.
               </p>
@@ -86,18 +86,18 @@ export function Landing() {
               ].map(([type, label, severity]) => (
                 <div
                   key={label}
-                  className="grid gap-2 py-3 md:grid-cols-[auto_minmax(0,1fr)_auto] md:items-center"
+                  className="grid gap-2 py-3 md:grid-cols-[5.75rem_minmax(0,1fr)_auto] md:items-center"
                 >
-                  <span className="inline-flex rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-600">
+                  <span className="inline-flex rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.2em] text-slate-600">
                     {type}
                   </span>
                   <p className="text-sm font-medium text-slate-900">{label}</p>
                   <span
                     className={[
-                      'inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.18em]',
+                      'inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.2em]',
                       severity === 'Critical'
                         ? 'bg-red-50 text-red-600'
-                        : 'bg-amber-50 text-amber-700',
+                        : 'bg-amber-50 text-amber-600',
                     ].join(' ')}
                   >
                     {severity}
@@ -125,7 +125,7 @@ export function Landing() {
             description="A control surface designed to make the day readable in minutes."
             className="h-full"
           >
-            <div className="space-y-4">
+            <div className="space-y-5">
               <div className="grid gap-3 md:grid-cols-3">
                 {[
                   ['Open tickets', '12'],
@@ -136,16 +136,22 @@ export function Landing() {
                     key={label}
                     className="rounded-2xl border border-slate-200 bg-white/70 px-4 py-4"
                   >
-                    <p className="text-xl font-semibold tracking-tight text-slate-950">
-                      {value}
-                    </p>
-                    <p className="mt-1 text-sm text-slate-600">{label}</p>
+                    <div className="flex items-end justify-between gap-3">
+                      <p className="text-2xl font-semibold tracking-tight text-slate-950">
+                        {value}
+                      </p>
+                      <p className="text-[11px] uppercase tracking-[0.24em] text-slate-400">
+                        {label}
+                      </p>
+                    </div>
                   </div>
                 ))}
               </div>
 
               <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
-                <p className="text-sm font-semibold text-slate-900">Requires attention</p>
+                <p className="text-sm font-semibold tracking-tight text-slate-950">
+                  Requires attention
+                </p>
                 <div className="mt-3 divide-y divide-slate-200">
                   {[
                     'Maintenance — 1 overdue ticket',
@@ -166,8 +172,8 @@ export function Landing() {
             description="A shared SaaS workspace for people who need clean visibility before they need more meetings."
             className="h-full"
           >
-            <div className="space-y-5">
-              <p className="text-sm leading-7 text-slate-600">
+            <div className="space-y-6">
+              <p className="text-sm text-slate-600">
                 Use one product to spot incidents faster, review approvals sooner, and
                 keep guest-impacting issues visible while they can still be resolved.
               </p>

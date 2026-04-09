@@ -124,17 +124,17 @@ export function ResetPassword() {
 
   return (
     <div className="min-h-screen bg-slate-50/60 px-5 py-10 md:px-8">
-      <div className="mx-auto flex min-h-[calc(100vh-5rem)] max-w-xl items-center">
+      <div className="mx-auto flex min-h-[calc(100vh-5rem)] max-w-md items-center">
         <SurfaceCard
           title="Reset password"
           description="Set a new password for your Ops Core account."
           className="w-full"
         >
-          <div className="mb-6 space-y-1">
-            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">
+          <div className="mb-6 space-y-1.5">
+            <p className="text-[11px] font-medium uppercase tracking-[0.24em] text-slate-400">
               Ops Core V12
             </p>
-            <p className="text-sm leading-6 text-slate-600">
+            <p className="text-sm text-slate-600">
               Finish recovery and return to the operational workspace.
             </p>
           </div>
@@ -158,7 +158,7 @@ export function ResetPassword() {
           {!isCheckingRecovery && isReady ? (
             <form className="space-y-4" onSubmit={handleSubmit}>
               <label className="block space-y-2">
-                <span className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+                <span className="text-[11px] font-medium uppercase tracking-[0.24em] text-slate-400">
                   New password
                 </span>
                 <input
@@ -167,12 +167,12 @@ export function ResetPassword() {
                   onChange={(event) => setPassword(event.target.value)}
                   autoComplete="new-password"
                   required
-                  className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none"
+                  className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-950 outline-none transition-colors focus:border-slate-950"
                 />
               </label>
 
               <label className="block space-y-2">
-                <span className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+                <span className="text-[11px] font-medium uppercase tracking-[0.24em] text-slate-400">
                   Confirm password
                 </span>
                 <input
@@ -181,7 +181,7 @@ export function ResetPassword() {
                   onChange={(event) => setConfirmPassword(event.target.value)}
                   autoComplete="new-password"
                   required
-                  className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none"
+                  className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-950 outline-none transition-colors focus:border-slate-950"
                 />
               </label>
 
@@ -196,7 +196,7 @@ export function ResetPassword() {
               <button
                 type="submit"
                 disabled={isSubmitting || !isSupabaseConfigured}
-                className="inline-flex w-full items-center justify-center rounded-2xl bg-slate-950 px-4 py-3 text-sm font-medium text-white transition-opacity disabled:cursor-not-allowed disabled:opacity-60"
+                className="inline-flex w-full items-center justify-center rounded-2xl bg-slate-950 px-4 py-3 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {isSubmitting ? 'Updating password...' : 'Update password'}
               </button>
