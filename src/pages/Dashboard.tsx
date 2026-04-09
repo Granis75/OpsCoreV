@@ -18,33 +18,52 @@ interface AlertItem {
   message: string
 }
 
-interface RecentActivityItem {
+type Signal = {
   id: string
-  occurredAt: string
+  type: 'maintenance' | 'expense' | 'reputation'
   label: string
+  severity: 'critical' | 'warning' | 'normal'
+  timestamp: string
 }
 
 interface ExpenseAmountRow {
   amount: number | string | null
 }
 
-interface MaintenanceTicketActivityRow {
+type MaintenanceTicketStatus =
+  | 'open'
+  | 'in_progress'
+  | 'waiting_vendor'
+  | 'resolved'
+  | 'closed'
+
+type PriorityLevel = 'low' | 'medium' | 'high' | 'critical'
+
+type ExpenseStatus = 'draft' | 'submitted' | 'approved' | 'rejected' | 'reimbursed'
+
+interface MaintenanceTicketSignalRow {
   id: string
   title: string
   reported_at: string
+  due_at: string | null
+  status: MaintenanceTicketStatus
+  priority: PriorityLevel
 }
 
-interface VendorInteractionActivityRow {
+interface ExpenseSignalRow {
   id: string
-  vendor_id: string | null
-  interaction_type: string
-  interaction_at: string
-  summary: string
+  description: string
+  amount: number | string
+  status: ExpenseStatus
+  created_at: string
 }
 
-interface VendorNameRow {
+interface ReviewSignalRow {
   id: string
-  name: string
+  title: string | null
+  body: string | null
+  rating: number | string
+  reviewed_at: string
 }
 
 const emptyKpis: DashboardKpis = {
@@ -52,6 +71,12 @@ const emptyKpis: DashboardKpis = {
   criticalTickets: 0,
   todayExpenses: 0,
   activeVendors: 0,
+}
+
+const signalSeverityRank: Record<Signal['severity'], number> = {
+  critical: 0,
+  warning: 1,
+  normal: 2,
 }
 
 function getTodayDateString() {
@@ -87,12 +112,89 @@ function formatActivityTime(value: string) {
   }).format(date)
 }
 
-function formatInteractionLabel(value: string) {
-  return value.replace(/_/g, ' ')
-}
-
 function pluralize(count: number, singular: string, plural = `${singular}s`) {
   return count === 1 ? singular : plural
+}
+
+function truncateSignalLabel(value: string, maxLength = 88) {
+  if (value.length <= maxLength) {
+    return value
+  }
+
+  return `${value.slice(0, maxLength - 1)}…`
+}
+
+function getExpenseAmountValue(expense: ExpenseSignalRow) {
+  return Number(expense.amount ?? 0)
+}
+
+function isFlaggedExpense(expense: ExpenseSignalRow) {
+  return getExpenseAmountValue(expense) > 200
+}
+
+function isNegativeReview(review: ReviewSignalRow) {
+  return Number(review.rating ?? 0) <= 3
+}
+
+function getReviewComment(review: ReviewSignalRow) {
+  return review.body ?? review.title ?? 'Guest feedback recorded'
+}
+
+function getMaintenanceSignalSeverity(
+  ticket: MaintenanceTicketSignalRow,
+): Signal['severity'] {
+  if (ticket.priority === 'critical') {
+    return 'critical'
+  }
+
+  if (ticket.due_at) {
+    const dueAt = new Date(ticket.due_at)
+
+    if (!Number.isNaN(dueAt.getTime()) && dueAt.getTime() < Date.now()) {
+      return 'warning'
+    }
+  }
+
+  return 'normal'
+}
+
+function getExpenseSignalSeverity(expense: ExpenseSignalRow): Signal['severity'] {
+  if (isFlaggedExpense(expense)) {
+    return 'warning'
+  }
+
+  if (expense.status === 'submitted') {
+    return 'warning'
+  }
+
+  return 'normal'
+}
+
+function getReviewSignalSeverity(review: ReviewSignalRow): Signal['severity'] {
+  const rating = Number(review.rating ?? 0)
+
+  if (rating <= 2) {
+    return 'critical'
+  }
+
+  if (isNegativeReview(review)) {
+    return 'warning'
+  }
+
+  return 'normal'
+}
+
+function sortSignals(signals: Signal[]) {
+  return [...signals].sort((left, right) => {
+    const severityDifference =
+      signalSeverityRank[left.severity] - signalSeverityRank[right.severity]
+
+    if (severityDifference !== 0) {
+      return severityDifference
+    }
+
+    return new Date(right.timestamp).getTime() - new Date(left.timestamp).getTime()
+  })
 }
 
 function buildPriorityActions(
@@ -256,7 +358,7 @@ async function getAlerts(): Promise<AlertItem[]> {
   return alerts
 }
 
-async function getRecentActivity(): Promise<RecentActivityItem[]> {
+async function getSignals(): Promise<Signal[]> {
   if (!supabase) {
     throw new Error(
       'Supabase client is not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in the root .env.local file.',
@@ -264,83 +366,97 @@ async function getRecentActivity(): Promise<RecentActivityItem[]> {
   }
 
   const [
-    { data: recentTicketsRows, error: recentTicketsError },
-    { data: recentInteractionsRows, error: recentInteractionsError },
+    { data: ticketRows, error: ticketsError },
+    { data: expenseRows, error: expensesError },
+    { data: reviewRows, error: reviewsError },
   ] = await Promise.all([
     supabase
       .from('maintenance_tickets')
-      .select('id, title, reported_at')
+      .select('id, title, reported_at, due_at, status, priority')
       .order('reported_at', { ascending: false })
-      .limit(5),
+      .limit(10),
     supabase
-      .from('vendor_interactions')
-      .select('id, vendor_id, interaction_type, interaction_at, summary')
-      .order('interaction_at', { ascending: false })
-      .limit(5),
+      .from('cash_expenses')
+      .select('id, description, amount, status, created_at')
+      .order('created_at', { ascending: false })
+      .limit(10),
+    supabase
+      .from('reviews')
+      .select('id, title, body, rating, reviewed_at')
+      .order('reviewed_at', { ascending: false })
+      .limit(10),
   ])
 
-  if (recentTicketsError) {
-    throw new Error(recentTicketsError.message)
+  if (ticketsError) {
+    throw new Error(ticketsError.message)
   }
 
-  if (recentInteractionsError) {
-    throw new Error(recentInteractionsError.message)
+  if (expensesError) {
+    throw new Error(expensesError.message)
   }
 
-  const interactions =
-    (recentInteractionsRows as VendorInteractionActivityRow[] | null) ?? []
-  const vendorIds = Array.from(
-    new Set(
-      interactions
-        .map((interaction) => interaction.vendor_id)
-        .filter((vendorId): vendorId is string => Boolean(vendorId)),
-    ),
-  )
+  if (reviewsError) {
+    throw new Error(reviewsError.message)
+  }
 
-  let vendorNameMap = new Map<string, string>()
+  const maintenanceSignals = (
+    (ticketRows as MaintenanceTicketSignalRow[] | null) ?? []
+  ).map((ticket) => {
+    const severity = getMaintenanceSignalSeverity(ticket)
 
-  if (vendorIds.length > 0) {
-    const { data: vendorRows, error: vendorError } = await supabase
-      .from('vendors')
-      .select('id, name')
-      .in('id', vendorIds)
-
-    if (vendorError) {
-      throw new Error(vendorError.message)
+    return {
+      id: `maintenance-${ticket.id}`,
+      type: 'maintenance' as const,
+      severity,
+      timestamp: ticket.reported_at,
+      label:
+        severity === 'critical'
+          ? `Critical ticket: ${ticket.title}`
+          : severity === 'warning'
+            ? `Overdue ticket: ${ticket.title}`
+            : `Ticket update: ${ticket.title}`,
     }
+  })
 
-    vendorNameMap = new Map(
-      ((vendorRows as VendorNameRow[] | null) ?? []).map((vendor) => [
-        vendor.id,
-        vendor.name,
-      ]),
-    )
-  }
+  const expenseSignals = ((expenseRows as ExpenseSignalRow[] | null) ?? []).map(
+    (expense) => {
+      const severity = getExpenseSignalSeverity(expense)
 
-  const ticketItems = ((recentTicketsRows as MaintenanceTicketActivityRow[] | null) ?? []).map(
-    (ticket) => ({
-      id: `ticket-${ticket.id}`,
-      occurredAt: ticket.reported_at,
-      label: `Ticket: ${ticket.title}`,
-    }),
+      return {
+        id: `expense-${expense.id}`,
+        type: 'expense' as const,
+        severity,
+        timestamp: expense.created_at,
+        label:
+          severity === 'warning'
+            ? `Approval check: ${truncateSignalLabel(expense.description)}`
+            : `Expense logged: ${truncateSignalLabel(expense.description)}`,
+      }
+    },
   )
 
-  const interactionItems = interactions.map((interaction) => ({
-    id: `interaction-${interaction.id}`,
-    occurredAt: interaction.interaction_at,
-    label: `Vendor ${formatInteractionLabel(interaction.interaction_type)}: ${
-      interaction.vendor_id
-        ? vendorNameMap.get(interaction.vendor_id) ?? interaction.summary
-        : interaction.summary
-    }`,
-  }))
+  const reputationSignals = ((reviewRows as ReviewSignalRow[] | null) ?? []).map(
+    (review) => {
+      const severity = getReviewSignalSeverity(review)
 
-  return [...ticketItems, ...interactionItems]
-    .sort(
-      (left, right) =>
-        new Date(right.occurredAt).getTime() - new Date(left.occurredAt).getTime(),
-    )
-    .slice(0, 10)
+      return {
+        id: `reputation-${review.id}`,
+        type: 'reputation' as const,
+        severity,
+        timestamp: review.reviewed_at,
+        label:
+          severity === 'normal'
+            ? `Review received: ${truncateSignalLabel(getReviewComment(review))}`
+            : `Guest issue: ${truncateSignalLabel(getReviewComment(review))}`,
+      }
+    },
+  )
+
+  return sortSignals([
+    ...maintenanceSignals,
+    ...expenseSignals,
+    ...reputationSignals,
+  ])
 }
 
 interface KpiCardProps {
@@ -369,10 +485,17 @@ export function Dashboard() {
   const modules = navigationItems.filter((item) => item.to !== '/')
   const [kpis, setKpis] = useState<DashboardKpis>(emptyKpis)
   const [alerts, setAlerts] = useState<AlertItem[]>([])
-  const [recentActivity, setRecentActivity] = useState<RecentActivityItem[]>([])
+  const [signals, setSignals] = useState<Signal[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const priorityActions = buildPriorityActions(kpis, alerts)
+  const criticalSignalsCount = signals.filter(
+    (signal) => signal.severity === 'critical',
+  ).length
+  const warningSignalsCount = signals.filter(
+    (signal) => signal.severity === 'warning',
+  ).length
+  const topSignals = signals.slice(0, 10)
 
   useEffect(() => {
     let isCancelled = false
@@ -409,16 +532,16 @@ export function Dashboard() {
           return
         }
 
-        const [nextKpis, nextAlerts, nextActivity] = await Promise.all([
+        const [nextKpis, nextAlerts, nextSignals] = await Promise.all([
           getKpis(),
           getAlerts(),
-          getRecentActivity(),
+          getSignals(),
         ])
 
         if (!isCancelled) {
           setKpis(nextKpis)
           setAlerts(nextAlerts)
-          setRecentActivity(nextActivity)
+          setSignals(nextSignals)
         }
       } catch (error) {
         console.error('Unable to load dashboard data', error)
@@ -483,6 +606,33 @@ export function Dashboard() {
         ))}
       </div>
 
+      {!isLoading && !errorMessage ? (
+        <SurfaceCard
+          title="Control strip"
+          description="Unified operational signal count across maintenance, spend, and guest feedback."
+        >
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="rounded-2xl border border-slate-200 bg-white/70 px-4 py-4">
+              <p className="text-2xl font-semibold tracking-tight text-slate-950">
+                {criticalSignalsCount}
+              </p>
+              <p className="mt-1 text-sm font-semibold text-slate-700">
+                Critical signals
+              </p>
+            </div>
+
+            <div className="rounded-2xl border border-slate-200 bg-white/70 px-4 py-4">
+              <p className="text-2xl font-semibold tracking-tight text-slate-950">
+                {warningSignalsCount}
+              </p>
+              <p className="mt-1 text-sm font-semibold text-slate-700">
+                Warning signals
+              </p>
+            </div>
+          </div>
+        </SurfaceCard>
+      ) : null}
+
       {!isLoading && !errorMessage && priorityActions.length > 0 ? (
         <SurfaceCard
           title="Priority actions"
@@ -533,31 +683,36 @@ export function Dashboard() {
         </SurfaceCard>
 
         <SurfaceCard
-          title="Recent activity"
-          description="Latest ticket reports and vendor touchpoints coming from the live ops feed."
+          title="Live feed"
+          description="Top operational signals ranked by severity and freshness."
           className="h-full"
         >
           {isLoading ? (
-            <p className="text-sm text-slate-600">Loading activity...</p>
-          ) : recentActivity.length > 0 ? (
+            <p className="text-sm text-slate-600">Loading live feed...</p>
+          ) : topSignals.length > 0 ? (
             <ul className="space-y-3">
-              {recentActivity.map((item) => (
+              {topSignals.map((signal) => (
                 <li
-                  key={item.id}
+                  key={signal.id}
                   className="flex flex-col gap-1 border-b border-slate-100 pb-3 last:border-0 last:pb-0 md:flex-row md:items-baseline md:justify-between"
                 >
-                  <span className="text-sm font-medium text-slate-900">
-                    {item.label}
-                  </span>
+                  <div className="space-y-1">
+                    <span className="inline-flex rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-600">
+                      {signal.type}
+                    </span>
+                    <p className="text-sm font-medium text-slate-900">
+                      {signal.label}
+                    </p>
+                  </div>
                   <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-                    {formatActivityTime(item.occurredAt)}
+                    {formatActivityTime(signal.timestamp)}
                   </span>
                 </li>
               ))}
             </ul>
           ) : (
             <p className="text-sm leading-7 text-slate-600">
-              No recent operations activity recorded yet.
+              No live operational signals recorded yet.
             </p>
           )}
         </SurfaceCard>
