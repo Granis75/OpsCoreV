@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { PageSection } from '../components/ui/PageSection'
 import { SurfaceCard } from '../components/ui/SurfaceCard'
 import { isSupabaseConfigured, supabase } from '../lib/supabase'
@@ -127,6 +128,7 @@ function ExpenseKpiCard({ label, value, helper }: ExpenseKpiCardProps) {
 }
 
 export function Expenses() {
+  const [searchParams] = useSearchParams()
   const [expenses, setExpenses] = useState<ExpenseRecord[]>([])
   const [categories, setCategories] = useState<ExpenseCategoryRow[]>([])
   const [categoryMap, setCategoryMap] = useState<Map<string, string>>(new Map())
@@ -238,6 +240,26 @@ export function Expenses() {
     (left, right) =>
       new Date(right.expense_date).getTime() - new Date(left.expense_date).getTime(),
   )
+  const statusFilter = searchParams.get('status')
+  const flaggedOnly = searchParams.get('flagged') === 'true'
+  const searchQuery = searchParams.get('q')?.trim().toLowerCase() ?? ''
+  const filteredExpenses = sortedExpenses.filter((expense) => {
+    if (statusFilter && expense.status !== statusFilter) {
+      return false
+    }
+
+    if (flaggedOnly && !isFlagged(expense)) {
+      return false
+    }
+
+    if (!searchQuery) {
+      return true
+    }
+
+    const categoryName = categoryMap.get(expense.expense_category_id) ?? ''
+
+    return [expense.description, categoryName].join(' ').toLowerCase().includes(searchQuery)
+  })
 
   async function handleCreateExpense(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -376,11 +398,15 @@ export function Expenses() {
           <p className="text-sm leading-7 text-slate-600">{errorMessage}</p>
         ) : null}
 
-        {!isLoading && !errorMessage && sortedExpenses.length === 0 ? (
+        {!isLoading && !errorMessage && expenses.length === 0 ? (
           <p className="text-sm leading-7 text-slate-600">No expenses recorded</p>
         ) : null}
 
-        {!isLoading && !errorMessage && sortedExpenses.length > 0 ? (
+        {!isLoading && !errorMessage && expenses.length > 0 && filteredExpenses.length === 0 ? (
+          <p className="text-sm leading-7 text-slate-600">No expenses match this view</p>
+        ) : null}
+
+        {!isLoading && !errorMessage && filteredExpenses.length > 0 ? (
           <div className="overflow-x-auto">
             <table className="min-w-full border-separate border-spacing-0">
               <thead>
@@ -401,7 +427,7 @@ export function Expenses() {
               </thead>
 
               <tbody>
-                {sortedExpenses.map((expense) => {
+                {filteredExpenses.map((expense) => {
                   const flagged = isFlagged(expense)
                   const categoryName =
                     categoryMap.get(expense.expense_category_id) ?? 'Uncategorized'

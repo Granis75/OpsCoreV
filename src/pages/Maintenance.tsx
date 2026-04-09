@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { PageSection } from '../components/ui/PageSection'
 import { SurfaceCard } from '../components/ui/SurfaceCard'
 import { isSupabaseConfigured, supabase } from '../lib/supabase'
@@ -129,6 +130,22 @@ function sortTickets(tickets: MaintenanceTicketRecord[]) {
   })
 }
 
+function isPriorityLevel(value: string | null): value is PriorityLevel {
+  return value === 'low' || value === 'medium' || value === 'high' || value === 'critical'
+}
+
+function isMaintenanceTicketStatus(
+  value: string | null,
+): value is MaintenanceTicketStatus {
+  return (
+    value === 'open' ||
+    value === 'in_progress' ||
+    value === 'waiting_vendor' ||
+    value === 'resolved' ||
+    value === 'closed'
+  )
+}
+
 interface MaintenanceKpiCardProps {
   label: string
   value: number
@@ -148,6 +165,7 @@ function MaintenanceKpiCard({ label, value }: MaintenanceKpiCardProps) {
 }
 
 export function Maintenance() {
+  const [searchParams] = useSearchParams()
   const [tickets, setTickets] = useState<MaintenanceTicketRecord[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
@@ -225,6 +243,31 @@ export function Maintenance() {
   }, [])
 
   const sortedTickets = sortTickets(tickets)
+  const priorityFilter = isPriorityLevel(searchParams.get('priority'))
+    ? searchParams.get('priority')
+    : null
+  const statusFilter = isMaintenanceTicketStatus(searchParams.get('status'))
+    ? searchParams.get('status')
+    : null
+  const searchQuery = searchParams.get('q')?.trim().toLowerCase() ?? ''
+  const filteredTickets = sortedTickets.filter((ticket) => {
+    if (priorityFilter && ticket.priority !== priorityFilter) {
+      return false
+    }
+
+    if (statusFilter && ticket.status !== statusFilter) {
+      return false
+    }
+
+    if (!searchQuery) {
+      return true
+    }
+
+    return [ticket.title, ticket.location, ticket.description]
+      .join(' ')
+      .toLowerCase()
+      .includes(searchQuery)
+  })
   const openTicketsCount = sortedTickets.length
   const criticalTicketsCount = sortedTickets.filter(
     (ticket) => getTicketSeverity(ticket) === 'critical',
@@ -275,13 +318,17 @@ export function Maintenance() {
           <p className="text-sm leading-7 text-slate-600">{errorMessage}</p>
         ) : null}
 
-        {!isLoading && !errorMessage && sortedTickets.length === 0 ? (
+        {!isLoading && !errorMessage && tickets.length === 0 ? (
           <p className="text-sm leading-7 text-slate-600">All systems operational</p>
         ) : null}
 
-        {!isLoading && !errorMessage && sortedTickets.length > 0 ? (
+        {!isLoading && !errorMessage && tickets.length > 0 && filteredTickets.length === 0 ? (
+          <p className="text-sm leading-7 text-slate-600">No tickets match this view</p>
+        ) : null}
+
+        {!isLoading && !errorMessage && filteredTickets.length > 0 ? (
           <div className="space-y-3">
-            {sortedTickets.map((ticket) => {
+            {filteredTickets.map((ticket) => {
               const severity = getTicketSeverity(ticket)
 
               return (

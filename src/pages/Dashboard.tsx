@@ -4,57 +4,30 @@ import { PageSection } from '../components/ui/PageSection'
 import { SurfaceCard } from '../components/ui/SurfaceCard'
 import { isSupabaseConfigured, supabase } from '../lib/supabase'
 
-interface DashboardKpis {
-  openTickets: number
-  criticalTickets: number
-  todayExpenses: number
-  activeVendors: number
-}
-
-interface AlertItem {
-  id: string
-  type: 'maintenance' | 'expense' | 'reputation'
-  message: string
-  severity: 'critical' | 'warning'
-  href: string
-  state: string
-}
-
-type Signal = {
-  id: string
-  type: 'maintenance' | 'expense' | 'reputation'
-  entity: string
-  label: string
-  severity: 'critical' | 'warning' | 'normal'
-  timestamp: string
-}
-
-interface ExpenseAmountRow {
-  amount: number | string | null
-}
-
+type DashboardModule = 'maintenance' | 'expenses' | 'reputation' | 'operations'
+type DashboardSeverity = 'critical' | 'warning' | 'normal'
 type MaintenanceTicketStatus =
   | 'open'
   | 'in_progress'
   | 'waiting_vendor'
   | 'resolved'
   | 'closed'
-
+type OperationItemStatus = 'open' | 'in_progress' | 'done'
 type PriorityLevel = 'low' | 'medium' | 'high' | 'critical'
-
 type ExpenseStatus = 'draft' | 'submitted' | 'approved' | 'rejected' | 'reimbursed'
+type ReviewResponseStatus = 'pending' | 'published' | 'not_needed'
 
-interface MaintenanceTicketSignalRow {
+interface MaintenanceTicketRow {
   id: string
   title: string
   location: string
-  reported_at: string
-  due_at: string | null
   status: MaintenanceTicketStatus
   priority: PriorityLevel
+  reported_at: string
+  due_at: string | null
 }
 
-interface ExpenseSignalRow {
+interface ExpenseRow {
   id: string
   description: string
   amount: number | string
@@ -62,22 +35,124 @@ interface ExpenseSignalRow {
   created_at: string
 }
 
-interface ReviewSignalRow {
+interface ReviewRow {
   id: string
   title: string | null
   body: string | null
   rating: number | string
   reviewed_at: string
+  response_status: ReviewResponseStatus
 }
 
-const emptyKpis: DashboardKpis = {
-  openTickets: 0,
-  criticalTickets: 0,
-  todayExpenses: 0,
-  activeVendors: 0,
+interface OperationRow {
+  id: string
+  type: 'ticket' | 'task' | 'intervention' | 'order'
+  title: string
+  status: OperationItemStatus
+  priority: PriorityLevel
+  created_at: string
+  location: string | null
+  notes: string | null
 }
 
-type Event = Signal
+interface TodaySignal {
+  id: string
+  module: DashboardModule
+  label: string
+  statusLabel: string
+  ctaLabel: 'View' | 'Review' | 'Respond'
+  href: string
+  severity: DashboardSeverity
+  timestamp: string
+}
+
+interface QueueItem {
+  id: string
+  label: string
+  meta: string
+  statusLabel: string
+  severity: DashboardSeverity
+  href: string
+}
+
+interface QueueBlockData {
+  module: Extract<DashboardModule, 'maintenance' | 'expenses' | 'operations'>
+  count: number
+  href: string
+  items: QueueItem[]
+}
+
+interface ActivityItem {
+  id: string
+  module: DashboardModule
+  label: string
+  timestamp: string
+  href: string
+  severity: DashboardSeverity
+}
+
+interface DashboardData {
+  todaySignals: TodaySignal[]
+  queueBlocks: QueueBlockData[]
+  recentActivity: ActivityItem[]
+}
+
+const moduleLabels: Record<DashboardModule, string> = {
+  maintenance: 'Maintenance',
+  expenses: 'Expenses',
+  reputation: 'Reputation',
+  operations: 'Operations',
+}
+
+const operationStatusLabels: Record<OperationItemStatus, string> = {
+  open: 'Open',
+  in_progress: 'In progress',
+  done: 'Done',
+}
+
+const maintenanceStatusLabels: Record<MaintenanceTicketStatus, string> = {
+  open: 'Open',
+  in_progress: 'In progress',
+  waiting_vendor: 'Waiting vendor',
+  resolved: 'Resolved',
+  closed: 'Closed',
+}
+
+const severityRank: Record<DashboardSeverity, number> = {
+  critical: 0,
+  warning: 1,
+  normal: 2,
+}
+
+const operationPriorityRank: Record<PriorityLevel, number> = {
+  critical: 0,
+  high: 1,
+  medium: 2,
+  low: 3,
+}
+
+const operationStatusRank: Record<OperationItemStatus, number> = {
+  open: 0,
+  in_progress: 1,
+  done: 2,
+}
+
+function buildHref(
+  pathname: string,
+  query: Record<string, string | null | undefined>,
+) {
+  const searchParams = new URLSearchParams()
+
+  for (const [key, value] of Object.entries(query)) {
+    if (value) {
+      searchParams.set(key, value)
+    }
+  }
+
+  const search = searchParams.toString()
+
+  return search ? `${pathname}?${search}` : pathname
+}
 
 function getDashboardUserLabel(email: string | null | undefined) {
   if (!email) {
@@ -94,25 +169,15 @@ function getDashboardUserLabel(email: string | null | undefined) {
   return cleaned.replace(/\b\w/g, (letter) => letter.toUpperCase())
 }
 
-function getTodayDateString() {
-  const now = new Date()
-  const year = now.getFullYear()
-  const month = String(now.getMonth() + 1).padStart(2, '0')
-  const day = String(now.getDate()).padStart(2, '0')
+function truncateText(value: string, maxLength = 88) {
+  if (value.length <= maxLength) {
+    return value
+  }
 
-  return `${year}-${month}-${day}`
+  return `${value.slice(0, maxLength - 1)}…`
 }
 
-function formatCurrency(value: number) {
-  return new Intl.NumberFormat('en-IE', {
-    style: 'currency',
-    currency: 'EUR',
-    minimumFractionDigits: value % 1 === 0 ? 0 : 2,
-    maximumFractionDigits: 2,
-  }).format(value)
-}
-
-function formatActivityTime(value: string) {
+function formatTimestamp(value: string) {
   const date = new Date(value)
 
   if (Number.isNaN(date.getTime())) {
@@ -127,49 +192,19 @@ function formatActivityTime(value: string) {
   }).format(date)
 }
 
-function formatEventType(type: Event['type']) {
-  if (type === 'maintenance') {
-    return 'Maintenance'
-  }
-
-  if (type === 'expense') {
-    return 'Expenses'
-  }
-
-  return 'Reputation'
-}
-
-function pluralize(count: number, singular: string, plural = `${singular}s`) {
-  return count === 1 ? singular : plural
-}
-
-function truncateSignalLabel(value: string, maxLength = 88) {
-  if (value.length <= maxLength) {
-    return value
-  }
-
-  return `${value.slice(0, maxLength - 1)}…`
-}
-
-function getExpenseAmountValue(expense: ExpenseSignalRow) {
+function getExpenseAmount(expense: ExpenseRow) {
   return Number(expense.amount ?? 0)
 }
 
-function isFlaggedExpense(expense: ExpenseSignalRow) {
-  return getExpenseAmountValue(expense) > 200
+function isFlaggedExpense(expense: ExpenseRow) {
+  return getExpenseAmount(expense) > 200
 }
 
-function isNegativeReview(review: ReviewSignalRow) {
-  return Number(review.rating ?? 0) <= 3
-}
-
-function getReviewComment(review: ReviewSignalRow) {
+function getReviewComment(review: ReviewRow) {
   return review.body ?? review.title ?? 'Guest feedback recorded'
 }
 
-function getMaintenanceSignalSeverity(
-  ticket: MaintenanceTicketSignalRow,
-): Signal['severity'] {
+function getMaintenanceSeverity(ticket: MaintenanceTicketRow): DashboardSeverity {
   if (ticket.priority === 'critical') {
     return 'critical'
   }
@@ -185,42 +220,116 @@ function getMaintenanceSignalSeverity(
   return 'normal'
 }
 
-function getExpenseSignalSeverity(expense: ExpenseSignalRow): Signal['severity'] {
-  if (isFlaggedExpense(expense)) {
-    return 'warning'
-  }
-
-  if (expense.status === 'submitted') {
-    return 'warning'
-  }
-
-  return 'normal'
-}
-
-function getReviewSignalSeverity(review: ReviewSignalRow): Signal['severity'] {
-  const rating = Number(review.rating ?? 0)
-
-  if (rating <= 2) {
+function getExpenseSeverity(expense: ExpenseRow): DashboardSeverity {
+  if (expense.status === 'submitted' && isFlaggedExpense(expense)) {
     return 'critical'
   }
 
-  if (isNegativeReview(review)) {
+  if (expense.status === 'submitted' || isFlaggedExpense(expense)) {
     return 'warning'
   }
 
   return 'normal'
 }
 
-function sortEvents(events: Event[]) {
-  return [...events].sort(
+function getReviewSeverity(review: ReviewRow): DashboardSeverity {
+  const rating = Number(review.rating ?? 0)
+
+  if (rating <= 2 && review.response_status === 'pending') {
+    return 'critical'
+  }
+
+  if (rating <= 3 || review.response_status === 'pending') {
+    return 'warning'
+  }
+
+  return 'normal'
+}
+
+function getOperationSeverity(item: OperationRow): DashboardSeverity {
+  if (item.priority === 'critical' && item.status !== 'done') {
+    return 'critical'
+  }
+
+  if (
+    (item.priority === 'high' || item.status === 'open') &&
+    item.status !== 'done'
+  ) {
+    return 'warning'
+  }
+
+  return 'normal'
+}
+
+function sortSignals(items: TodaySignal[]) {
+  return [...items].sort((left, right) => {
+    const severityDifference = severityRank[left.severity] - severityRank[right.severity]
+
+    if (severityDifference !== 0) {
+      return severityDifference
+    }
+
+    return new Date(right.timestamp).getTime() - new Date(left.timestamp).getTime()
+  })
+}
+
+function sortRecentActivity(items: ActivityItem[]) {
+  return [...items].sort(
     (left, right) =>
       new Date(right.timestamp).getTime() - new Date(left.timestamp).getTime(),
   )
 }
 
-function getSeverityToneClasses(severity: Event['severity']) {
+function sortOperationRows(items: OperationRow[]) {
+  return [...items].sort((left, right) => {
+    const priorityDifference =
+      operationPriorityRank[left.priority] - operationPriorityRank[right.priority]
+
+    if (priorityDifference !== 0) {
+      return priorityDifference
+    }
+
+    const statusDifference =
+      operationStatusRank[left.status] - operationStatusRank[right.status]
+
+    if (statusDifference !== 0) {
+      return statusDifference
+    }
+
+    return new Date(right.created_at).getTime() - new Date(left.created_at).getTime()
+  })
+}
+
+function sortMaintenanceRows(items: MaintenanceTicketRow[]) {
+  return [...items].sort((left, right) => {
+    const severityDifference =
+      severityRank[getMaintenanceSeverity(left)] -
+      severityRank[getMaintenanceSeverity(right)]
+
+    if (severityDifference !== 0) {
+      return severityDifference
+    }
+
+    return new Date(right.reported_at).getTime() - new Date(left.reported_at).getTime()
+  })
+}
+
+function sortExpenseRows(items: ExpenseRow[]) {
+  return [...items].sort((left, right) => {
+    const severityDifference =
+      severityRank[getExpenseSeverity(left)] - severityRank[getExpenseSeverity(right)]
+
+    if (severityDifference !== 0) {
+      return severityDifference
+    }
+
+    return new Date(right.created_at).getTime() - new Date(left.created_at).getTime()
+  })
+}
+
+function getToneClasses(severity: DashboardSeverity) {
   if (severity === 'critical') {
-    return 'bg-red-50 text-red-600'
+    return 'bg-red-50 text-red-700'
   }
 
   if (severity === 'warning') {
@@ -230,328 +339,422 @@ function getSeverityToneClasses(severity: Event['severity']) {
   return 'bg-slate-100 text-slate-600'
 }
 
-function getSeverityLabel(severity: Event['severity']) {
-  if (severity === 'critical') {
-    return 'Critical'
-  }
+function getTodaySignals(
+  maintenanceRows: MaintenanceTicketRow[],
+  expenseRows: ExpenseRow[],
+  reviewRows: ReviewRow[],
+  operationRows: OperationRow[],
+) {
+  const maintenanceSignals = maintenanceRows
+    .filter((ticket) => getMaintenanceSeverity(ticket) !== 'normal')
+    .map<TodaySignal>((ticket) => ({
+      id: `maintenance-${ticket.id}`,
+      module: 'maintenance',
+      label: truncateText(ticket.title),
+      statusLabel:
+        getMaintenanceSeverity(ticket) === 'critical' ? 'Critical' : 'Overdue',
+      ctaLabel: 'View',
+      href: buildHref('/app/maintenance', {
+        q: ticket.title,
+        priority: ticket.priority === 'critical' ? 'critical' : undefined,
+      }),
+      severity: getMaintenanceSeverity(ticket),
+      timestamp: ticket.reported_at,
+    }))
 
-  if (severity === 'warning') {
-    return 'Warning'
-  }
+  const expenseSignals = expenseRows
+    .filter((expense) => getExpenseSeverity(expense) !== 'normal')
+    .map<TodaySignal>((expense) => ({
+      id: `expense-${expense.id}`,
+      module: 'expenses',
+      label: truncateText(expense.description),
+      statusLabel:
+        expense.status === 'submitted' ? 'Pending approval' : 'Requires approval',
+      ctaLabel: 'Review',
+      href: buildHref('/app/expenses', {
+        q: expense.description,
+        status: expense.status === 'submitted' ? 'submitted' : undefined,
+        flagged: isFlaggedExpense(expense) ? 'true' : undefined,
+      }),
+      severity: getExpenseSeverity(expense),
+      timestamp: expense.created_at,
+    }))
 
-  return 'Normal'
+  const reputationSignals = reviewRows
+    .filter((review) => getReviewSeverity(review) !== 'normal')
+    .map<TodaySignal>((review) => ({
+      id: `reputation-${review.id}`,
+      module: 'reputation',
+      label: truncateText(getReviewComment(review)),
+      statusLabel:
+        review.response_status === 'pending' ? 'Needs response' : 'Needs attention',
+      ctaLabel: 'Respond',
+      href: buildHref('/app/reputation', {
+        filter: 'negative',
+        q: getReviewComment(review),
+      }),
+      severity: getReviewSeverity(review),
+      timestamp: review.reviewed_at,
+    }))
+
+  const operationSignals = operationRows
+    .filter((item) => getOperationSeverity(item) !== 'normal')
+    .map<TodaySignal>((item) => ({
+      id: `operations-${item.id}`,
+      module: 'operations',
+      label: truncateText(item.title),
+      statusLabel: operationStatusLabels[item.status],
+      ctaLabel: 'View',
+      href: buildHref('/app/operations', {
+        q: item.title,
+        type: item.type,
+        priority: item.priority,
+        status: item.status,
+      }),
+      severity: getOperationSeverity(item),
+      timestamp: item.created_at,
+    }))
+
+  return sortSignals([
+    ...maintenanceSignals,
+    ...expenseSignals,
+    ...reputationSignals,
+    ...operationSignals,
+  ]).slice(0, 5)
 }
 
-async function getKpis(): Promise<DashboardKpis> {
-  if (!supabase) {
-    throw new Error(
-      'Supabase client is not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in the root .env.local file.',
-    )
-  }
-
-  const today = getTodayDateString()
-
-  const [
-    { count: openTicketsCount, error: openTicketsError },
-    { count: criticalTicketsCount, error: criticalTicketsError },
-    { data: todayExpensesRows, error: todayExpensesError },
-    { count: activeVendorsCount, error: activeVendorsError },
-  ] = await Promise.all([
-    supabase
-      .from('maintenance_tickets')
-      .select('id', { count: 'exact', head: true })
-      .neq('status', 'resolved')
-      .neq('status', 'closed'),
-    supabase
-      .from('maintenance_tickets')
-      .select('id', { count: 'exact', head: true })
-      .eq('priority', 'critical')
-      .neq('status', 'resolved'),
-    supabase
-      .from('cash_expenses')
-      .select('amount')
-      .eq('expense_date', today),
-    supabase
-      .from('vendors')
-      .select('id', { count: 'exact', head: true })
-      .eq('status', 'active'),
-  ])
-
-  if (openTicketsError) {
-    throw new Error(openTicketsError.message)
-  }
-
-  if (criticalTicketsError) {
-    throw new Error(criticalTicketsError.message)
-  }
-
-  if (todayExpensesError) {
-    throw new Error(todayExpensesError.message)
-  }
-
-  if (activeVendorsError) {
-    throw new Error(activeVendorsError.message)
-  }
-
-  const todayExpenses = ((todayExpensesRows as ExpenseAmountRow[] | null) ?? []).reduce(
-    (sum, row) => sum + Number(row.amount ?? 0),
-    0,
+function getQueueBlocks(
+  maintenanceRows: MaintenanceTicketRow[],
+  expenseRows: ExpenseRow[],
+  operationRows: OperationRow[],
+): QueueBlockData[] {
+  const maintenanceQueue = sortMaintenanceRows(
+    maintenanceRows.filter(
+      (ticket) => ticket.status !== 'resolved' && ticket.status !== 'closed',
+    ),
   )
 
-  return {
-    openTickets: openTicketsCount ?? 0,
-    criticalTickets: criticalTicketsCount ?? 0,
-    todayExpenses,
-    activeVendors: activeVendorsCount ?? 0,
-  }
+  const expenseQueue = sortExpenseRows(
+    expenseRows.filter(
+      (expense) => expense.status === 'submitted' || isFlaggedExpense(expense),
+    ),
+  )
+
+  const operationsQueue = sortOperationRows(
+    operationRows.filter((item) => item.status !== 'done'),
+  )
+
+  return [
+    {
+      module: 'maintenance',
+      count: maintenanceQueue.length,
+      href: '/app/maintenance',
+      items: maintenanceQueue.slice(0, 3).map((ticket) => ({
+        id: ticket.id,
+        label: truncateText(ticket.title, 64),
+        meta: ticket.location,
+        statusLabel: maintenanceStatusLabels[ticket.status],
+        severity: getMaintenanceSeverity(ticket),
+        href: buildHref('/app/maintenance', { q: ticket.title }),
+      })),
+    },
+    {
+      module: 'expenses',
+      count: expenseQueue.length,
+      href: '/app/expenses',
+      items: expenseQueue.slice(0, 3).map((expense) => ({
+        id: expense.id,
+        label: truncateText(expense.description, 64),
+        meta: expense.status === 'submitted' ? 'Pending approval' : 'Requires approval',
+        statusLabel: expense.status.replace(/_/g, ' '),
+        severity: getExpenseSeverity(expense),
+        href: buildHref('/app/expenses', {
+          q: expense.description,
+          status: expense.status === 'submitted' ? 'submitted' : undefined,
+          flagged: isFlaggedExpense(expense) ? 'true' : undefined,
+        }),
+      })),
+    },
+    {
+      module: 'operations',
+      count: operationsQueue.length,
+      href: '/app/operations',
+      items: operationsQueue.slice(0, 3).map((item) => ({
+        id: item.id,
+        label: truncateText(item.title, 64),
+        meta: item.location ?? moduleLabels.operations,
+        statusLabel: operationStatusLabels[item.status],
+        severity: getOperationSeverity(item),
+        href: buildHref('/app/operations', {
+          q: item.title,
+          type: item.type,
+          priority: item.priority,
+        }),
+      })),
+    },
+  ]
 }
 
-async function getAlerts(): Promise<AlertItem[]> {
-  if (!supabase) {
-    throw new Error(
-      'Supabase client is not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in the root .env.local file.',
-    )
-  }
+function getRecentActivity(
+  maintenanceRows: MaintenanceTicketRow[],
+  expenseRows: ExpenseRow[],
+  reviewRows: ReviewRow[],
+  operationRows: OperationRow[],
+) {
+  const maintenanceActivity = maintenanceRows.map<ActivityItem>((ticket) => ({
+    id: `maintenance-${ticket.id}`,
+    module: 'maintenance',
+    label: truncateText(ticket.title),
+    timestamp: ticket.reported_at,
+    href: buildHref('/app/maintenance', { q: ticket.title }),
+    severity: getMaintenanceSeverity(ticket),
+  }))
 
-  const now = new Date().toISOString()
+  const expenseActivity = expenseRows.map<ActivityItem>((expense) => ({
+    id: `expenses-${expense.id}`,
+    module: 'expenses',
+    label: truncateText(expense.description),
+    timestamp: expense.created_at,
+    href: buildHref('/app/expenses', { q: expense.description }),
+    severity: getExpenseSeverity(expense),
+  }))
 
-  const [
-    { count: criticalTicketsCount, error: criticalTicketsError },
-    { count: overdueTicketsCount, error: overdueTicketsError },
-    { count: pendingExpensesCount, error: pendingExpensesError },
-    { count: negativeReviewsCount, error: negativeReviewsError },
-  ] = await Promise.all([
-    supabase
-      .from('maintenance_tickets')
-      .select('id', { count: 'exact', head: true })
-      .eq('priority', 'critical')
-      .neq('status', 'resolved'),
-    supabase
-      .from('maintenance_tickets')
-      .select('id', { count: 'exact', head: true })
-      .lt('due_at', now)
-      .neq('status', 'resolved')
-      .neq('status', 'closed'),
-    supabase
-      .from('cash_expenses')
-      .select('id', { count: 'exact', head: true })
-      .eq('status', 'submitted'),
-    supabase
-      .from('reviews')
-      .select('id', { count: 'exact', head: true })
-      .lte('rating', 3),
-  ])
+  const reputationActivity = reviewRows.map<ActivityItem>((review) => ({
+    id: `reputation-${review.id}`,
+    module: 'reputation',
+    label: truncateText(getReviewComment(review)),
+    timestamp: review.reviewed_at,
+    href: buildHref('/app/reputation', { q: getReviewComment(review) }),
+    severity: getReviewSeverity(review),
+  }))
 
-  if (criticalTicketsError) {
-    throw new Error(criticalTicketsError.message)
-  }
+  const operationsActivity = operationRows.map<ActivityItem>((item) => ({
+    id: `operations-${item.id}`,
+    module: 'operations',
+    label: truncateText(item.title),
+    timestamp: item.created_at,
+    href: buildHref('/app/operations', { q: item.title }),
+    severity: getOperationSeverity(item),
+  }))
 
-  if (overdueTicketsError) {
-    throw new Error(overdueTicketsError.message)
-  }
-
-  if (pendingExpensesError) {
-    throw new Error(pendingExpensesError.message)
-  }
-
-  if (negativeReviewsError) {
-    throw new Error(negativeReviewsError.message)
-  }
-
-  const alerts: AlertItem[] = []
-
-  if ((criticalTicketsCount ?? 0) > 0) {
-    const count = criticalTicketsCount ?? 0
-    alerts.push({
-      id: 'critical-tickets',
-      type: 'maintenance',
-      message: `${count} critical ${pluralize(count, 'ticket')}`,
-      severity: 'critical',
-      href: '/maintenance',
-      state: 'Immediate',
-    })
-  }
-
-  if ((overdueTicketsCount ?? 0) > 0) {
-    const count = overdueTicketsCount ?? 0
-    alerts.push({
-      id: 'overdue-tickets',
-      type: 'maintenance',
-      message: `${count} overdue ${pluralize(count, 'ticket')}`,
-      severity: 'warning',
-      href: '/maintenance',
-      state: 'No progress',
-    })
-  }
-
-  if ((pendingExpensesCount ?? 0) > 0) {
-    const count = pendingExpensesCount ?? 0
-    alerts.push({
-      id: 'pending-expenses',
-      type: 'expense',
-      message: `${count} ${pluralize(count, 'expense')} pending approval`,
-      severity: 'warning',
-      href: '/expenses',
-      state: 'Awaiting approval',
-    })
-  }
-
-  if ((negativeReviewsCount ?? 0) > 0) {
-    const count = negativeReviewsCount ?? 0
-    alerts.push({
-      id: 'negative-reviews',
-      type: 'reputation',
-      message: `${count} negative ${pluralize(count, 'review')}`,
-      severity: count > 1 ? 'critical' : 'warning',
-      href: '/reputation',
-      state: 'Guest follow-up',
-    })
-  }
-
-  return alerts
+  return sortRecentActivity([
+    ...maintenanceActivity,
+    ...expenseActivity,
+    ...reputationActivity,
+    ...operationsActivity,
+  ]).slice(0, 10)
 }
 
-async function getEvents(): Promise<Event[]> {
+async function getDashboardData(): Promise<DashboardData> {
   if (!supabase) {
-    throw new Error(
-      'Supabase client is not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in the root .env.local file.',
-    )
+    throw new Error('Supabase client is not configured.')
   }
 
   const [
-    { data: ticketRows, error: ticketsError },
-    { data: expenseRows, error: expensesError },
-    { data: reviewRows, error: reviewsError },
+    { data: maintenanceRows, error: maintenanceError },
+    { data: expenseRows, error: expenseError },
+    { data: reviewRows, error: reviewError },
+    { data: operationRows, error: operationError },
   ] = await Promise.all([
     supabase
       .from('maintenance_tickets')
-      .select('id, title, location, reported_at, due_at, status, priority')
+      .select('id, title, location, status, priority, reported_at, due_at')
       .order('reported_at', { ascending: false })
-      .limit(10),
+      .limit(12),
     supabase
       .from('cash_expenses')
       .select('id, description, amount, status, created_at')
       .order('created_at', { ascending: false })
-      .limit(10),
+      .limit(12),
     supabase
       .from('reviews')
-      .select('id, title, body, rating, reviewed_at')
+      .select('id, title, body, rating, reviewed_at, response_status')
       .order('reviewed_at', { ascending: false })
-      .limit(10),
+      .limit(12),
+    supabase
+      .from('operation_items')
+      .select('id, type, title, status, priority, created_at, location, notes')
+      .order('created_at', { ascending: false })
+      .limit(12),
   ])
 
-  if (ticketsError) {
-    throw new Error(ticketsError.message)
+  if (maintenanceError) {
+    throw new Error(maintenanceError.message)
   }
 
-  if (expensesError) {
-    throw new Error(expensesError.message)
+  if (expenseError) {
+    throw new Error(expenseError.message)
   }
 
-  if (reviewsError) {
-    throw new Error(reviewsError.message)
+  if (reviewError) {
+    throw new Error(reviewError.message)
   }
 
-  const maintenanceEvents = (
-    (ticketRows as MaintenanceTicketSignalRow[] | null) ?? []
-  ).map((ticket) => {
-    const severity = getMaintenanceSignalSeverity(ticket)
+  if (operationError) {
+    throw new Error(operationError.message)
+  }
 
-    return {
-      id: `maintenance-${ticket.id}`,
-      type: 'maintenance' as const,
-      entity: ticket.location || ticket.title,
-      severity,
-      timestamp: ticket.reported_at,
-      label:
-        severity === 'critical'
-          ? `Critical ticket: ${ticket.title}`
-          : severity === 'warning'
-            ? `Overdue ticket: ${ticket.title}`
-            : `Ticket update: ${ticket.title}`,
-    }
-  })
+  const nextMaintenanceRows = (maintenanceRows as MaintenanceTicketRow[] | null) ?? []
+  const nextExpenseRows = (expenseRows as ExpenseRow[] | null) ?? []
+  const nextReviewRows = (reviewRows as ReviewRow[] | null) ?? []
+  const nextOperationRows = (operationRows as OperationRow[] | null) ?? []
 
-  const expenseEvents = ((expenseRows as ExpenseSignalRow[] | null) ?? []).map(
-    (expense) => {
-      const severity = getExpenseSignalSeverity(expense)
-
-      return {
-        id: `expense-${expense.id}`,
-        type: 'expense' as const,
-        entity:
-          severity === 'warning' ? 'Expense approvals' : 'Operating spend',
-        severity,
-        timestamp: expense.created_at,
-        label:
-          severity === 'warning'
-            ? `Approval check: ${truncateSignalLabel(expense.description)}`
-            : `Expense logged: ${truncateSignalLabel(expense.description)}`,
-      }
-    },
-  )
-
-  const reputationEvents = ((reviewRows as ReviewSignalRow[] | null) ?? []).map(
-    (review) => {
-      const severity = getReviewSignalSeverity(review)
-
-      return {
-        id: `reputation-${review.id}`,
-        type: 'reputation' as const,
-        entity: severity === 'normal' ? 'Guest feedback' : 'Guest complaints',
-        severity,
-        timestamp: review.reviewed_at,
-        label:
-          severity === 'normal'
-            ? `Review received: ${truncateSignalLabel(getReviewComment(review))}`
-            : `Guest issue: ${truncateSignalLabel(getReviewComment(review))}`,
-      }
-    },
-  )
-
-  return sortEvents([
-    ...maintenanceEvents,
-    ...expenseEvents,
-    ...reputationEvents,
-  ])
+  return {
+    todaySignals: getTodaySignals(
+      nextMaintenanceRows,
+      nextExpenseRows,
+      nextReviewRows,
+      nextOperationRows,
+    ),
+    queueBlocks: getQueueBlocks(
+      nextMaintenanceRows,
+      nextExpenseRows,
+      nextOperationRows,
+    ),
+    recentActivity: getRecentActivity(
+      nextMaintenanceRows,
+      nextExpenseRows,
+      nextReviewRows,
+      nextOperationRows,
+    ),
+  }
 }
 
-interface KpiCardProps {
-  label: string
-  value: string
-  helper: string
+interface TodaySignalRowProps {
+  signal: TodaySignal
 }
 
-function KpiCard({ label, value, helper }: KpiCardProps) {
+function TodaySignalRow({ signal }: TodaySignalRowProps) {
   return (
-    <div className="rounded-3xl border border-white/70 bg-white/80 p-5 shadow-shell backdrop-blur">
-      <div className="space-y-2">
-        <p className="text-2xl font-semibold tracking-tight text-slate-950 md:text-3xl">
-          {value}
+    <Link
+      to={signal.href}
+      className="group grid gap-3 rounded-2xl border border-slate-100 px-4 py-3 transition-colors hover:bg-slate-50/80 md:grid-cols-[auto_minmax(0,1fr)_auto_auto] md:items-center"
+    >
+      <span className="inline-flex rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-600">
+        {moduleLabels[signal.module]}
+      </span>
+      <div className="min-w-0">
+        <p className="truncate text-sm font-medium text-slate-900">{signal.label}</p>
+        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+          {formatTimestamp(signal.timestamp)}
         </p>
-        <div className="space-y-1">
-          <p className="text-sm font-semibold text-slate-700">{label}</p>
-          <p className="text-xs leading-5 text-slate-500">{helper}</p>
-        </div>
       </div>
-    </div>
+      <span
+        className={[
+          'inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.18em]',
+          getToneClasses(signal.severity),
+        ].join(' ')}
+      >
+        {signal.statusLabel}
+      </span>
+      <span className="text-sm font-semibold text-slate-700 transition-colors group-hover:text-slate-950">
+        {signal.ctaLabel}
+      </span>
+    </Link>
+  )
+}
+
+interface QueueBlockProps {
+  block: QueueBlockData
+}
+
+function QueueBlock({ block }: QueueBlockProps) {
+  return (
+    <SurfaceCard
+      title={moduleLabels[block.module]}
+      description={`${block.count} active ${block.count === 1 ? 'item' : 'items'}`}
+      className="h-full"
+    >
+      <div className="space-y-3">
+        {block.items.length > 0 ? (
+          <div className="space-y-2">
+            {block.items.map((item) => (
+              <Link
+                key={item.id}
+                to={item.href}
+                className="group flex items-start justify-between gap-3 rounded-2xl border border-slate-100 px-4 py-3 transition-colors hover:bg-slate-50/80"
+              >
+                <div className="min-w-0 space-y-1">
+                  <p className="truncate text-sm font-medium text-slate-900">
+                    {item.label}
+                  </p>
+                  <p className="truncate text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+                    {item.meta}
+                  </p>
+                </div>
+                <div className="flex shrink-0 flex-col items-end gap-1">
+                  <span
+                    className={[
+                      'inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em]',
+                      getToneClasses(item.severity),
+                    ].join(' ')}
+                  >
+                    {item.statusLabel}
+                  </span>
+                </div>
+              </Link>
+            ))}
+          </div>
+        ) : (
+          <Link
+            to={block.href}
+            className="block rounded-2xl border border-dashed border-slate-200 px-4 py-3 text-sm text-slate-600 transition-colors hover:bg-slate-50/80"
+          >
+            No active items. Open {moduleLabels[block.module]}.
+          </Link>
+        )}
+
+        <Link
+          to={block.href}
+          className="inline-flex items-center text-sm font-semibold text-slate-700 transition-colors hover:text-slate-950"
+        >
+          Open full list
+        </Link>
+      </div>
+    </SurfaceCard>
+  )
+}
+
+interface ActivityRowProps {
+  item: ActivityItem
+}
+
+function ActivityRow({ item }: ActivityRowProps) {
+  return (
+    <Link
+      to={item.href}
+      className="group grid gap-2 rounded-2xl border border-slate-100 px-4 py-3 transition-colors hover:bg-slate-50/80 md:grid-cols-[auto_minmax(0,1fr)_auto] md:items-center"
+    >
+      <div className="flex items-center gap-2">
+        <span className="inline-flex rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-600">
+          {moduleLabels[item.module]}
+        </span>
+        <span
+          className={[
+            'inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.18em]',
+            getToneClasses(item.severity),
+          ].join(' ')}
+        >
+          {item.severity}
+        </span>
+      </div>
+
+      <p className="truncate text-sm font-medium text-slate-900">{item.label}</p>
+
+      <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500 transition-colors group-hover:text-slate-700">
+        {formatTimestamp(item.timestamp)}
+      </span>
+    </Link>
   )
 }
 
 export function Dashboard() {
-  const [kpis, setKpis] = useState<DashboardKpis>(emptyKpis)
-  const [alerts, setAlerts] = useState<AlertItem[]>([])
-  const [events, setEvents] = useState<Event[]>([])
+  const [todaySignals, setTodaySignals] = useState<TodaySignal[]>([])
+  const [queueBlocks, setQueueBlocks] = useState<QueueBlockData[]>([])
+  const [recentActivity, setRecentActivity] = useState<ActivityItem[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [userLabel, setUserLabel] = useState('there')
-  const recentActivity = sortEvents(events).slice(0, 5)
-  const criticalAttentionCount = alerts.filter(
-    (alert) => alert.severity === 'critical',
-  ).length
-  const warningAttentionCount = alerts.filter(
-    (alert) => alert.severity === 'warning',
-  ).length
 
   useEffect(() => {
     let isCancelled = false
@@ -559,9 +762,7 @@ export function Dashboard() {
     async function loadDashboard() {
       if (!isSupabaseConfigured || !supabase) {
         if (!isCancelled) {
-          setErrorMessage(
-            'Supabase env missing. Fill VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to load live operations data.',
-          )
+          setErrorMessage('Open a module once live data is connected.')
           setIsLoading(false)
         }
         return
@@ -582,7 +783,7 @@ export function Dashboard() {
 
         if (!session) {
           if (!isCancelled) {
-            setErrorMessage('Sign in to view the live operations dashboard.')
+            setErrorMessage('Sign in to open the operational workspace.')
             setIsLoading(false)
           }
           return
@@ -592,26 +793,18 @@ export function Dashboard() {
           setUserLabel(getDashboardUserLabel(session.user.email))
         }
 
-        const [nextKpis, nextAlerts, nextEvents] = await Promise.all([
-          getKpis(),
-          getAlerts(),
-          getEvents(),
-        ])
+        const data = await getDashboardData()
 
         if (!isCancelled) {
-          setKpis(nextKpis)
-          setAlerts(nextAlerts)
-          setEvents(nextEvents)
+          setTodaySignals(data.todaySignals)
+          setQueueBlocks(data.queueBlocks)
+          setRecentActivity(data.recentActivity)
         }
       } catch (error) {
         console.error('Unable to load dashboard data', error)
 
         if (!isCancelled) {
-          setErrorMessage(
-            error instanceof Error
-              ? error.message
-              : 'Unable to load live dashboard data right now.',
-          )
+          setErrorMessage('Open the relevant module to continue working while the dashboard reconnects.')
         }
       } finally {
         if (!isCancelled) {
@@ -627,149 +820,88 @@ export function Dashboard() {
     }
   }, [])
 
-  const kpiCards = [
-    {
-      label: 'Open tickets',
-      value: isLoading ? '...' : String(kpis.openTickets),
-      helper: 'Active incidents across operations.',
-    },
-    {
-      label: 'Critical tickets',
-      value: isLoading ? '...' : String(kpis.criticalTickets),
-      helper: 'Escalations needing immediate coordination.',
-    },
-    {
-      label: 'Today expenses',
-      value: isLoading ? '...' : formatCurrency(kpis.todayExpenses),
-      helper: 'Spend recorded today across operations.',
-    },
-    {
-      label: 'Active vendors',
-      value: isLoading ? '...' : String(kpis.activeVendors),
-      helper: 'Operational partners currently active.',
-    },
-  ]
-
   return (
     <PageSection
       title={`Good morning, ${userLabel}`}
       description="Here’s what needs your attention today."
     >
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        {kpiCards.map((card) => (
-          <KpiCard
-            key={card.label}
-            label={card.label}
-            value={card.value}
-            helper={card.helper}
-          />
+      <SurfaceCard
+        title="Today signals"
+        description="Top operational items to review right now across maintenance, expenses, reputation, and operations."
+      >
+        {isLoading ? (
+          <p className="text-sm leading-7 text-slate-600">Loading today’s signals...</p>
+        ) : errorMessage ? (
+          <div className="space-y-3">
+            <p className="text-sm leading-7 text-slate-600">{errorMessage}</p>
+            <div className="flex flex-wrap gap-3">
+              <Link
+                to="/app/maintenance"
+                className="text-sm font-semibold text-slate-700 transition-colors hover:text-slate-950"
+              >
+                Open Maintenance
+              </Link>
+              <Link
+                to="/app/expenses"
+                className="text-sm font-semibold text-slate-700 transition-colors hover:text-slate-950"
+              >
+                Open Expenses
+              </Link>
+              <Link
+                to="/app/operations"
+                className="text-sm font-semibold text-slate-700 transition-colors hover:text-slate-950"
+              >
+                Open Operations
+              </Link>
+            </div>
+          </div>
+        ) : todaySignals.length > 0 ? (
+          <div className="space-y-2">
+            {todaySignals.map((signal) => (
+              <TodaySignalRow key={signal.id} signal={signal} />
+            ))}
+          </div>
+        ) : (
+          <Link
+            to="/app/operations"
+            className="block rounded-2xl border border-dashed border-slate-200 px-4 py-3 text-sm text-slate-600 transition-colors hover:bg-slate-50/80"
+          >
+            No urgent items right now. Open Operations to review the full workspace.
+          </Link>
+        )}
+      </SurfaceCard>
+
+      <div className="grid gap-4 xl:grid-cols-3">
+        {queueBlocks.map((block) => (
+          <QueueBlock key={block.module} block={block} />
         ))}
       </div>
 
-      {errorMessage ? (
-        <SurfaceCard
-          title="Live data unavailable"
-          description={errorMessage}
-        />
-      ) : null}
-
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
-        <SurfaceCard
-          title="Requires attention"
-          description={
-            alerts.length > 0
-              ? `${criticalAttentionCount} critical · ${warningAttentionCount} warning`
-              : 'No active blockers across maintenance, expenses, or reputation.'
-          }
-          className="h-full"
-        >
-          {isLoading ? (
-            <p className="text-sm text-slate-600">Loading action queue...</p>
-          ) : alerts.length > 0 ? (
-            <div className="divide-y divide-slate-100">
-              {alerts.map((alert) => (
-                <Link
-                  key={alert.id}
-                  to={alert.href}
-                  className="grid gap-2 py-3 transition-colors hover:bg-slate-50/80 md:grid-cols-[auto_minmax(0,1fr)_auto_auto] md:items-center"
-                >
-                  <span className="inline-flex rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-600">
-                    {formatEventType(alert.type)}
-                  </span>
-                  <p className="text-sm font-medium text-slate-900">
-                    {alert.message}
-                  </p>
-                  <span
-                    className={[
-                      'inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.18em]',
-                      getSeverityToneClasses(alert.severity),
-                    ].join(' ')}
-                  >
-                    {getSeverityLabel(alert.severity)}
-                  </span>
-                  <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-                    {alert.state}
-                  </span>
-                </Link>
-              ))}
-            </div>
-          ) : (
-            <p className="text-sm leading-7 text-slate-600">
-              All operations under control
-            </p>
-          )}
-        </SurfaceCard>
-
-        <SurfaceCard
-          title="Recent activity"
-          description="Latest updates across maintenance, expenses, and guest feedback."
-          className="h-full"
-        >
-          {isLoading ? (
-            <p className="text-sm text-slate-600">Loading activity...</p>
-          ) : recentActivity.length > 0 ? (
-            <div className="divide-y divide-slate-100">
-              {recentActivity.map((event) => (
-                <div
-                  key={event.id}
-                  className="grid gap-2 py-3 md:grid-cols-[auto_minmax(0,1fr)_auto] md:items-center"
-                >
-                  <div className="space-y-2">
-                    <span className="inline-flex rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-600">
-                      {formatEventType(event.type)}
-                    </span>
-                    <span
-                      className={[
-                        'inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.18em]',
-                        getSeverityToneClasses(event.severity),
-                      ].join(' ')}
-                    >
-                      {getSeverityLabel(event.severity)}
-                    </span>
-                  </div>
-
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-medium text-slate-900">
-                      {event.label}
-                    </p>
-                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-                      {event.entity}
-                    </p>
-                  </div>
-
-                  <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-                    {formatActivityTime(event.timestamp)}
-                  </span>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="text-sm leading-7 text-slate-600">
-              No recent operations activity recorded yet.
-            </p>
-          )}
-        </SurfaceCard>
-      </div>
+      <SurfaceCard
+        title="Recent activity"
+        description="Latest updates across the control layer, ordered by recency."
+      >
+        {isLoading ? (
+          <p className="text-sm leading-7 text-slate-600">Loading recent activity...</p>
+        ) : errorMessage ? (
+          <p className="text-sm leading-7 text-slate-600">
+            Open a module to continue reviewing live work.
+          </p>
+        ) : recentActivity.length > 0 ? (
+          <div className="space-y-2">
+            {recentActivity.map((item) => (
+              <ActivityRow key={item.id} item={item} />
+            ))}
+          </div>
+        ) : (
+          <Link
+            to="/app/operations"
+            className="block rounded-2xl border border-dashed border-slate-200 px-4 py-3 text-sm text-slate-600 transition-colors hover:bg-slate-50/80"
+          >
+            No recent activity yet. Open Operations to start logging work.
+          </Link>
+        )}
+      </SurfaceCard>
     </PageSection>
   )
 }

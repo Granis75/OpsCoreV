@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { PageSection } from '../components/ui/PageSection'
 import { SurfaceCard } from '../components/ui/SurfaceCard'
 import { isSupabaseConfigured, supabase } from '../lib/supabase'
@@ -77,6 +78,23 @@ const defaultFormState: OperationFormState = {
 
 function hasMissingOperationsSchema(code?: string) {
   return code === '42P01' || code === '42703' || code === 'PGRST204' || code === 'PGRST205'
+}
+
+function isOperationItemType(value: string | null): value is OperationItemType {
+  return (
+    value === 'ticket' ||
+    value === 'task' ||
+    value === 'intervention' ||
+    value === 'order'
+  )
+}
+
+function isOperationItemStatus(value: string | null): value is OperationItemStatus {
+  return value === 'open' || value === 'in_progress' || value === 'done'
+}
+
+function isOperationItemPriority(value: string | null): value is OperationItemPriority {
+  return value === 'low' || value === 'medium' || value === 'high' || value === 'critical'
 }
 
 function sortItems(items: OperationItem[]) {
@@ -271,6 +289,7 @@ function OperationsKpiCard({ label, value }: OperationsKpiCardProps) {
 }
 
 export function Operations() {
+  const [searchParams] = useSearchParams()
   const [items, setItems] = useState<OperationItem[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
@@ -282,6 +301,20 @@ export function Operations() {
   const [isCreateOpen, setIsCreateOpen] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [formState, setFormState] = useState<OperationFormState>(defaultFormState)
+
+  useEffect(() => {
+    const nextTypeFilter = searchParams.get('type')
+    const nextStatusFilter = searchParams.get('status')
+    const nextPriorityFilter = searchParams.get('priority')
+    const nextSearchQuery = searchParams.get('q')?.trim() ?? ''
+
+    setTypeFilter(isOperationItemType(nextTypeFilter) ? nextTypeFilter : 'all')
+    setStatusFilter(isOperationItemStatus(nextStatusFilter) ? nextStatusFilter : 'all')
+    setPriorityFilter(
+      isOperationItemPriority(nextPriorityFilter) ? nextPriorityFilter : 'all',
+    )
+    setSearchQuery(nextSearchQuery)
+  }, [searchParams])
 
   useEffect(() => {
     let isCancelled = false

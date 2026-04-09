@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { PageSection } from '../components/ui/PageSection'
 import { SurfaceCard } from '../components/ui/SurfaceCard'
 import { isSupabaseConfigured, supabase } from '../lib/supabase'
@@ -132,6 +133,7 @@ function ReputationKpiCard({ label, value, helper }: ReputationKpiCardProps) {
 }
 
 export function Reputation() {
+  const [searchParams] = useSearchParams()
   const [snapshots, setSnapshots] = useState<ReputationSnapshotRecord[]>([])
   const [reviews, setReviews] = useState<ReviewRecord[]>([])
   const [reviewSourceMap, setReviewSourceMap] = useState<Map<string, string>>(new Map())
@@ -265,6 +267,19 @@ export function Reputation() {
 
   const globalScore = getGlobalScore(snapshots, reviews)
   const trend = getTrend(snapshots, reviews)
+  const negativeOnly = searchParams.get('filter') === 'negative'
+  const searchQuery = searchParams.get('q')?.trim().toLowerCase() ?? ''
+  const filteredReviews = reviews.filter((review) => {
+    if (negativeOnly && !isNegativeReview(review)) {
+      return false
+    }
+
+    if (!searchQuery) {
+      return true
+    }
+
+    return getReviewComment(review).toLowerCase().includes(searchQuery)
+  })
 
   return (
     <PageSection
@@ -329,9 +344,13 @@ export function Reputation() {
           <p className="text-sm leading-7 text-slate-600">No recent guest feedback</p>
         ) : null}
 
-        {!isLoading && !errorMessage && reviews.length > 0 ? (
+        {!isLoading && !errorMessage && reviews.length > 0 && filteredReviews.length === 0 ? (
+          <p className="text-sm leading-7 text-slate-600">No reviews match this view</p>
+        ) : null}
+
+        {!isLoading && !errorMessage && filteredReviews.length > 0 ? (
           <div className="space-y-3">
-            {reviews.map((review) => {
+            {filteredReviews.map((review) => {
               const negative = isNegativeReview(review)
               const platform = reviewSourceMap.get(review.review_source_id) ?? 'Direct'
 
