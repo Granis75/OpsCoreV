@@ -211,11 +211,10 @@ function matchesFilters(
     return true
   }
 
-  const haystack = [item.title, item.location ?? '', item.notes ?? '']
+  return [item.title, item.location ?? '', item.notes ?? '']
     .join(' ')
     .toLowerCase()
-
-  return haystack.includes(normalizedQuery)
+    .includes(normalizedQuery)
 }
 
 function getKpis(items: OperationItem[]) {
@@ -230,9 +229,7 @@ function getKpis(items: OperationItem[]) {
 
 async function getAuthenticatedContext() {
   if (!supabase) {
-    throw new Error(
-      'Supabase env missing. Fill VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to load live operations data.',
-    )
+    throw new Error('Live operations data is unavailable right now.')
   }
 
   const {
@@ -261,7 +258,7 @@ async function getAuthenticatedContext() {
   const organizationId = (profileRow as ProfileRow | null)?.organization_id
 
   if (!organizationId) {
-    throw new Error('Your profile is not linked to an organization.')
+    throw new Error('Your workspace is not linked to an organization yet.')
   }
 
   return {
@@ -288,6 +285,75 @@ function OperationsKpiCard({ label, value }: OperationsKpiCardProps) {
   )
 }
 
+interface OperationQueueItemProps {
+  item: OperationItem
+  onEdit: (item: OperationItem) => void
+}
+
+function OperationQueueItem({ item, onEdit }: OperationQueueItemProps) {
+  return (
+    <div
+      className={[
+        'rounded-2xl border px-4 py-3 transition-colors',
+        getItemSurfaceClasses(item.priority),
+      ].join(' ')}
+    >
+      <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-start">
+        <div className="min-w-0 space-y-2">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="inline-flex rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold uppercase tracking-[0.14em] text-slate-600">
+              {typeLabels[item.type]}
+            </span>
+            <span
+              className={[
+                'inline-flex rounded-full px-2.5 py-1 text-xs font-semibold uppercase tracking-[0.14em]',
+                getPriorityBadgeClasses(item.priority),
+              ].join(' ')}
+            >
+              {priorityLabels[item.priority]}
+            </span>
+            <span
+              className={[
+                'inline-flex rounded-full px-2.5 py-1 text-xs font-semibold',
+                getStatusBadgeClasses(item.status),
+              ].join(' ')}
+            >
+              {statusLabels[item.status]}
+            </span>
+          </div>
+
+          <div className="space-y-1">
+            <h2 className="text-sm font-semibold tracking-tight text-slate-950 md:text-base">
+              {item.title}
+            </h2>
+            {item.location ? (
+              <p className="text-sm text-slate-600">{item.location}</p>
+            ) : null}
+            {item.notes ? (
+              <p className="text-sm leading-6 text-slate-500">{item.notes}</p>
+            ) : null}
+          </div>
+        </div>
+
+        <div className="flex flex-col items-start gap-3 md:items-end">
+          <div className="space-y-1 text-sm text-slate-500 md:text-right">
+            <p className="font-medium text-slate-700">{formatOpenedAgo(item.created_at)}</p>
+            <p>{formatCreatedAt(item.created_at)}</p>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => onEdit(item)}
+            className="inline-flex min-h-9 items-center justify-center rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-50"
+          >
+            Edit
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export function Operations() {
   const [searchParams] = useSearchParams()
   const [items, setItems] = useState<OperationItem[]>([])
@@ -300,6 +366,7 @@ export function Operations() {
   const [searchQuery, setSearchQuery] = useState('')
   const [isCreateOpen, setIsCreateOpen] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [editingItemId, setEditingItemId] = useState<string | null>(null)
   const [formState, setFormState] = useState<OperationFormState>(defaultFormState)
 
   useEffect(() => {
@@ -322,9 +389,7 @@ export function Operations() {
     async function loadOperations() {
       if (!isSupabaseConfigured || !supabase) {
         if (!isCancelled) {
-          setErrorMessage(
-            'Supabase env missing. Fill VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to load live operations data.',
-          )
+          setErrorMessage('Live operations data is unavailable right now.')
           setIsLoading(false)
         }
         return
@@ -344,9 +409,10 @@ export function Operations() {
 
         if (error) {
           if (hasMissingOperationsSchema(error.code)) {
-            throw new Error(
-              'Apply sql/002_operation_items.sql to enable the Operations workspace.',
-            )
+            if (!isCancelled) {
+              setItems([])
+            }
+            return
           }
 
           throw error
@@ -385,20 +451,18 @@ export function Operations() {
   )
   const kpis = getKpis(items)
 
-  async function handleCreateItem(event: FormEvent<HTMLFormElement>) {
+  async function handleSaveItem(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
 
     const title = formState.title.trim()
 
     if (!title) {
-      setErrorMessage('Enter a title to create an operational item.')
+      setErrorMessage('Enter a title to save this operational item.')
       return
     }
 
     if (!supabase) {
-      setErrorMessage(
-        'Supabase env missing. Fill VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to load live operations data.',
-      )
+      setErrorMessage('Live operations data is unavailable right now.')
       return
     }
 
@@ -407,49 +471,81 @@ export function Operations() {
 
     try {
       const context = await getAuthenticatedContext()
+      const payload = {
+        type: formState.type,
+        title,
+        status: formState.status,
+        priority: formState.priority,
+        location: formState.location.trim() || null,
+        notes: formState.notes.trim() || null,
+      }
 
-      const { data, error } = await supabase
-        .from('operation_items')
-        .insert({
-          organization_id: context.organizationId,
-          created_by_profile_id: context.userId,
-          type: formState.type,
-          title,
-          status: formState.status,
-          priority: formState.priority,
-          location: formState.location.trim() || null,
-          notes: formState.notes.trim() || null,
-        })
+      const query = editingItemId
+        ? supabase.from('operation_items').update(payload).eq('id', editingItemId)
+        : supabase.from('operation_items').insert({
+            organization_id: context.organizationId,
+            created_by_profile_id: context.userId,
+            ...payload,
+          })
+
+      const { data, error } = await query
         .select('id, type, title, status, priority, created_at, location, notes')
         .single()
 
       if (error) {
         if (hasMissingOperationsSchema(error.code)) {
-          throw new Error(
-            'Apply sql/002_operation_items.sql to enable the Operations workspace.',
-          )
+          throw new Error('Unable to save this item right now.')
         }
 
         throw error
       }
 
-      setItems((currentItems) => sortItems([data as OperationItem, ...currentItems]))
-      setFormState(defaultFormState)
-      setIsCreateOpen(false)
+      setItems((currentItems) => {
+        const nextItem = data as OperationItem
+
+        if (editingItemId) {
+          return sortItems(
+            currentItems.map((item) => (item.id === editingItemId ? nextItem : item)),
+          )
+        }
+
+        return sortItems([nextItem, ...currentItems])
+      })
+
+      closeModal()
     } catch (error) {
-      console.error('Unable to create operation item', error)
+      console.error('Unable to save operation item', error)
       setErrorMessage(
-        error instanceof Error
-          ? error.message
-          : 'Unable to create the operational item right now.',
+        error instanceof Error ? error.message : 'Unable to save this item right now.',
       )
     } finally {
       setIsSubmitting(false)
     }
   }
 
+  function closeModal() {
+    setFormState(defaultFormState)
+    setEditingItemId(null)
+    setIsCreateOpen(false)
+  }
+
   function openCreateModal() {
     setFormState(defaultFormState)
+    setEditingItemId(null)
+    setErrorMessage(null)
+    setIsCreateOpen(true)
+  }
+
+  function openEditModal(item: OperationItem) {
+    setFormState({
+      type: item.type,
+      title: item.title,
+      priority: item.priority,
+      status: item.status,
+      location: item.location ?? '',
+      notes: item.notes ?? '',
+    })
+    setEditingItemId(item.id)
     setErrorMessage(null)
     setIsCreateOpen(true)
   }
@@ -473,7 +569,7 @@ export function Operations() {
 
       <SurfaceCard
         title="Operational queue"
-        description="Filter the live queue, keep unfinished work first, and log new operational activity as it happens."
+        description="Track live operational work, keep execution visible, and update items without leaving the queue."
       >
         <div className="flex flex-col gap-4">
           <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
@@ -546,9 +642,26 @@ export function Operations() {
           ) : null}
 
           {!isLoading && !errorMessage && items.length === 0 ? (
-            <p className="text-sm leading-7 text-slate-600">
-              No operational items recorded
-            </p>
+            <div className="rounded-2xl border border-dashed border-slate-200 bg-white/70 px-5 py-5">
+              <div className="space-y-4">
+                <div className="space-y-1">
+                  <h2 className="text-sm font-semibold text-slate-900">
+                    No operational items recorded
+                  </h2>
+                  <p className="text-sm leading-6 text-slate-600">
+                    Start by creating a ticket, task, intervention or order.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={openCreateModal}
+                  className="inline-flex min-h-10 items-center justify-center rounded-2xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-slate-800"
+                >
+                  New item
+                </button>
+              </div>
+            </div>
           ) : null}
 
           {!isLoading && !errorMessage && items.length > 0 && filteredItems.length === 0 ? (
@@ -558,60 +671,13 @@ export function Operations() {
           ) : null}
 
           {!isLoading && !errorMessage && filteredItems.length > 0 ? (
-            <div className="space-y-3">
+            <div className="space-y-2">
               {filteredItems.map((item) => (
-                <div
+                <OperationQueueItem
                   key={item.id}
-                  className={[
-                    'rounded-3xl border p-5 transition-colors',
-                    getItemSurfaceClasses(item.priority),
-                  ].join(' ')}
-                >
-                  <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                    <div className="min-w-0 space-y-2">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="inline-flex rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold uppercase tracking-[0.14em] text-slate-600">
-                          {typeLabels[item.type]}
-                        </span>
-                        <span
-                          className={[
-                            'inline-flex rounded-full px-2.5 py-1 text-xs font-semibold uppercase tracking-[0.14em]',
-                            getPriorityBadgeClasses(item.priority),
-                          ].join(' ')}
-                        >
-                          {priorityLabels[item.priority]}
-                        </span>
-                        <span
-                          className={[
-                            'inline-flex rounded-full px-2.5 py-1 text-xs font-semibold',
-                            getStatusBadgeClasses(item.status),
-                          ].join(' ')}
-                        >
-                          {statusLabels[item.status]}
-                        </span>
-                      </div>
-
-                      <div className="space-y-1">
-                        <h2 className="text-base font-semibold tracking-tight text-slate-950">
-                          {item.title}
-                        </h2>
-                        {item.location ? (
-                          <p className="text-sm text-slate-600">{item.location}</p>
-                        ) : null}
-                        {item.notes ? (
-                          <p className="text-sm leading-6 text-slate-500">{item.notes}</p>
-                        ) : null}
-                      </div>
-                    </div>
-
-                    <div className="space-y-1 text-sm text-slate-500 md:text-right">
-                      <p className="font-medium text-slate-700">
-                        {formatOpenedAgo(item.created_at)}
-                      </p>
-                      <p>{formatCreatedAt(item.created_at)}</p>
-                    </div>
-                  </div>
-                </div>
+                  item={item}
+                  onEdit={openEditModal}
+                />
               ))}
             </div>
           ) : null}
@@ -622,10 +688,10 @@ export function Operations() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/25 px-4 py-6 backdrop-blur-sm">
           <div className="w-full max-w-2xl">
             <SurfaceCard
-              title="New operational item"
+              title={editingItemId ? 'Edit operational item' : 'New operational item'}
               description="Log a real operational activity with the minimum fields needed to track execution."
             >
-              <form className="space-y-4" onSubmit={handleCreateItem}>
+              <form className="space-y-4" onSubmit={handleSaveItem}>
                 <div className="grid gap-4 md:grid-cols-3">
                   <div className="space-y-2">
                     <label
@@ -773,7 +839,7 @@ export function Operations() {
                 <div className="flex flex-col gap-3 pt-2 md:flex-row md:justify-end">
                   <button
                     type="button"
-                    onClick={() => setIsCreateOpen(false)}
+                    onClick={closeModal}
                     className="inline-flex min-h-11 items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50"
                   >
                     Cancel
@@ -783,7 +849,11 @@ export function Operations() {
                     disabled={isSubmitting}
                     className="inline-flex min-h-11 items-center justify-center rounded-2xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
                   >
-                    {isSubmitting ? 'Saving...' : 'Create item'}
+                    {isSubmitting
+                      ? 'Saving...'
+                      : editingItemId
+                        ? 'Save changes'
+                        : 'Create item'}
                   </button>
                 </div>
               </form>
