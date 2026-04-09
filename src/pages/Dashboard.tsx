@@ -60,7 +60,7 @@ interface TodaySignal {
   module: DashboardModule
   label: string
   statusLabel: string
-  ctaLabel: 'View' | 'Review' | 'Respond'
+  ctaLabel: 'View' | 'Review' | 'Respond' | 'Open'
   href: string
   severity: DashboardSeverity
   timestamp: string
@@ -95,6 +95,13 @@ interface DashboardData {
   todaySignals: TodaySignal[]
   queueBlocks: QueueBlockData[]
   recentActivity: ActivityItem[]
+}
+
+interface DashboardKpis {
+  openTickets: number
+  criticalTickets: number
+  todayExpenses: number
+  activeVendors: number
 }
 
 const moduleLabels: Record<DashboardModule, string> = {
@@ -169,6 +176,15 @@ function getDashboardUserLabel(email: string | null | undefined) {
   return cleaned.replace(/\b\w/g, (letter) => letter.toUpperCase())
 }
 
+function getTodayDateString() {
+  const now = new Date()
+  const year = now.getFullYear()
+  const month = String(now.getMonth() + 1).padStart(2, '0')
+  const day = String(now.getDate()).padStart(2, '0')
+
+  return `${year}-${month}-${day}`
+}
+
 function truncateText(value: string, maxLength = 88) {
   if (value.length <= maxLength) {
     return value
@@ -190,6 +206,15 @@ function formatTimestamp(value: string) {
     hour: '2-digit',
     minute: '2-digit',
   }).format(date)
+}
+
+function formatCurrency(value: number) {
+  return new Intl.NumberFormat('en-IE', {
+    style: 'currency',
+    currency: 'EUR',
+    minimumFractionDigits: value % 1 === 0 ? 0 : 2,
+    maximumFractionDigits: 2,
+  }).format(value)
 }
 
 function getExpenseAmount(expense: ExpenseRow) {
@@ -339,6 +364,64 @@ function getToneClasses(severity: DashboardSeverity) {
   return 'bg-slate-100 text-slate-600'
 }
 
+async function getKpis(): Promise<DashboardKpis> {
+  if (!supabase) {
+    throw new Error('Supabase client is not configured.')
+  }
+
+  const today = getTodayDateString()
+
+  const [
+    { count: openTicketsCount, error: openTicketsError },
+    { count: criticalTicketsCount, error: criticalTicketsError },
+    { data: todayExpenseRows, error: todayExpensesError },
+    { count: activeVendorsCount, error: activeVendorsError },
+  ] = await Promise.all([
+    supabase
+      .from('maintenance_tickets')
+      .select('id', { count: 'exact', head: true })
+      .neq('status', 'resolved')
+      .neq('status', 'closed'),
+    supabase
+      .from('maintenance_tickets')
+      .select('id', { count: 'exact', head: true })
+      .eq('priority', 'critical')
+      .neq('status', 'resolved')
+      .neq('status', 'closed'),
+    supabase.from('cash_expenses').select('amount').eq('expense_date', today),
+    supabase
+      .from('vendors')
+      .select('id', { count: 'exact', head: true })
+      .eq('status', 'active'),
+  ])
+
+  if (openTicketsError) {
+    throw new Error(openTicketsError.message)
+  }
+
+  if (criticalTicketsError) {
+    throw new Error(criticalTicketsError.message)
+  }
+
+  if (todayExpensesError) {
+    throw new Error(todayExpensesError.message)
+  }
+
+  if (activeVendorsError) {
+    throw new Error(activeVendorsError.message)
+  }
+
+  return {
+    openTickets: openTicketsCount ?? 0,
+    criticalTickets: criticalTicketsCount ?? 0,
+    todayExpenses: ((todayExpenseRows as Array<{ amount: number | string | null }> | null) ?? []).reduce(
+      (sum, row) => sum + Number(row.amount ?? 0),
+      0,
+    ),
+    activeVendors: activeVendorsCount ?? 0,
+  }
+}
+
 function getTodaySignals(
   maintenanceRows: MaintenanceTicketRow[],
   expenseRows: ExpenseRow[],
@@ -404,7 +487,7 @@ function getTodaySignals(
       module: 'operations',
       label: truncateText(item.title),
       statusLabel: operationStatusLabels[item.status],
-      ctaLabel: 'View',
+      ctaLabel: 'Open',
       href: buildHref('/app/operations', {
         q: item.title,
         type: item.type,
@@ -542,7 +625,7 @@ function getRecentActivity(
     ...expenseActivity,
     ...reputationActivity,
     ...operationsActivity,
-  ]).slice(0, 10)
+  ]).slice(0, 8)
 }
 
 async function getDashboardData(): Promise<DashboardData> {
@@ -748,7 +831,39 @@ function ActivityRow({ item }: ActivityRowProps) {
   )
 }
 
+interface KpiCardProps {
+  label: string
+  value: string
+  helper: string
+  href: string
+}
+
+function KpiCard({ label, value, helper, href }: KpiCardProps) {
+  return (
+    <Link
+      to={href}
+      className="rounded-3xl border border-white/70 bg-white/80 p-5 shadow-shell backdrop-blur transition-colors hover:bg-slate-50/80"
+    >
+      <div className="space-y-2">
+        <p className="text-2xl font-semibold tracking-tight text-slate-950 md:text-3xl">
+          {value}
+        </p>
+        <div className="space-y-1">
+          <p className="text-sm font-semibold text-slate-700">{label}</p>
+          <p className="text-xs leading-5 text-slate-500">{helper}</p>
+        </div>
+      </div>
+    </Link>
+  )
+}
+
 export function Dashboard() {
+  const [kpis, setKpis] = useState<DashboardKpis>({
+    openTickets: 0,
+    criticalTickets: 0,
+    todayExpenses: 0,
+    activeVendors: 0,
+  })
   const [todaySignals, setTodaySignals] = useState<TodaySignal[]>([])
   const [queueBlocks, setQueueBlocks] = useState<QueueBlockData[]>([])
   const [recentActivity, setRecentActivity] = useState<ActivityItem[]>([])
@@ -793,9 +908,10 @@ export function Dashboard() {
           setUserLabel(getDashboardUserLabel(session.user.email))
         }
 
-        const data = await getDashboardData()
+        const [nextKpis, data] = await Promise.all([getKpis(), getDashboardData()])
 
         if (!isCancelled) {
+          setKpis(nextKpis)
           setTodaySignals(data.todaySignals)
           setQueueBlocks(data.queueBlocks)
           setRecentActivity(data.recentActivity)
@@ -820,13 +936,52 @@ export function Dashboard() {
     }
   }, [])
 
+  const kpiCards = [
+    {
+      label: 'Open tickets',
+      value: String(kpis.openTickets),
+      helper: 'Open maintenance queue',
+      href: '/app/maintenance',
+    },
+    {
+      label: 'Critical tickets',
+      value: String(kpis.criticalTickets),
+      helper: 'Immediate maintenance issues',
+      href: buildHref('/app/maintenance', { priority: 'critical' }),
+    },
+    {
+      label: 'Today spend',
+      value: formatCurrency(kpis.todayExpenses),
+      helper: 'Open expense control',
+      href: '/app/expenses',
+    },
+    {
+      label: 'Active vendors',
+      value: String(kpis.activeVendors),
+      helper: 'Open vendor directory',
+      href: '/app/vendors',
+    },
+  ]
+
   return (
     <PageSection
       title={`Good morning, ${userLabel}`}
       description="Here’s what needs your attention today."
     >
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        {kpiCards.map((card) => (
+          <KpiCard
+            key={card.label}
+            label={card.label}
+            value={isLoading ? '...' : card.value}
+            helper={card.helper}
+            href={card.href}
+          />
+        ))}
+      </div>
+
       <SurfaceCard
-        title="Today signals"
+        title="Requires attention"
         description="Top operational items to review right now across maintenance, expenses, reputation, and operations."
       >
         {isLoading ? (
