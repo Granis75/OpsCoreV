@@ -21,6 +21,7 @@ interface AlertItem {
 type Signal = {
   id: string
   type: 'maintenance' | 'expense' | 'reputation'
+  entity: string
   label: string
   severity: 'critical' | 'warning' | 'normal'
   timestamp: string
@@ -44,6 +45,7 @@ type ExpenseStatus = 'draft' | 'submitted' | 'approved' | 'rejected' | 'reimburs
 interface MaintenanceTicketSignalRow {
   id: string
   title: string
+  location: string
   reported_at: string
   due_at: string | null
   status: MaintenanceTicketStatus
@@ -73,10 +75,15 @@ const emptyKpis: DashboardKpis = {
   activeVendors: 0,
 }
 
-const signalSeverityRank: Record<Signal['severity'], number> = {
-  critical: 0,
-  warning: 1,
-  normal: 2,
+type Event = Signal
+
+interface EventGroup {
+  id: string
+  type: Event['type']
+  entity: string
+  isIncident: boolean
+  latestTimestamp: string
+  events: Event[]
 }
 
 function getTodayDateString() {
@@ -184,17 +191,78 @@ function getReviewSignalSeverity(review: ReviewSignalRow): Signal['severity'] {
   return 'normal'
 }
 
-function sortSignals(signals: Signal[]) {
-  return [...signals].sort((left, right) => {
-    const severityDifference =
-      signalSeverityRank[left.severity] - signalSeverityRank[right.severity]
+function sortEvents(events: Event[]) {
+  return [...events].sort(
+    (left, right) =>
+      new Date(right.timestamp).getTime() - new Date(left.timestamp).getTime(),
+  )
+}
 
-    if (severityDifference !== 0) {
-      return severityDifference
+function groupEvents(events: Event[]) {
+  const groups = new Map<string, EventGroup>()
+
+  for (const event of sortEvents(events)) {
+    const groupId = `${event.type}:${event.entity}`
+    const existingGroup = groups.get(groupId)
+
+    if (!existingGroup) {
+      groups.set(groupId, {
+        id: groupId,
+        type: event.type,
+        entity: event.entity,
+        isIncident: event.severity === 'critical',
+        latestTimestamp: event.timestamp,
+        events: [event],
+      })
+      continue
     }
 
-    return new Date(right.timestamp).getTime() - new Date(left.timestamp).getTime()
-  })
+    existingGroup.events.push(event)
+    existingGroup.isIncident =
+      existingGroup.isIncident || event.severity === 'critical'
+
+    if (
+      new Date(event.timestamp).getTime() >
+      new Date(existingGroup.latestTimestamp).getTime()
+    ) {
+      existingGroup.latestTimestamp = event.timestamp
+    }
+  }
+
+  return [...groups.values()]
+    .map((group) => ({
+      ...group,
+      events: sortEvents(group.events),
+    }))
+    .sort(
+      (left, right) =>
+        new Date(right.latestTimestamp).getTime() -
+        new Date(left.latestTimestamp).getTime(),
+    )
+}
+
+function getSeverityToneClasses(severity: Event['severity']) {
+  if (severity === 'critical') {
+    return 'bg-red-50 text-red-600'
+  }
+
+  if (severity === 'warning') {
+    return 'bg-amber-50 text-amber-700'
+  }
+
+  return 'bg-slate-100 text-slate-600'
+}
+
+function getSeverityLabel(severity: Event['severity']) {
+  if (severity === 'critical') {
+    return 'Critical'
+  }
+
+  if (severity === 'warning') {
+    return 'Warning'
+  }
+
+  return 'Normal'
 }
 
 function buildPriorityActions(
@@ -358,7 +426,7 @@ async function getAlerts(): Promise<AlertItem[]> {
   return alerts
 }
 
-async function getSignals(): Promise<Signal[]> {
+async function getEvents(): Promise<Event[]> {
   if (!supabase) {
     throw new Error(
       'Supabase client is not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in the root .env.local file.',
@@ -372,7 +440,7 @@ async function getSignals(): Promise<Signal[]> {
   ] = await Promise.all([
     supabase
       .from('maintenance_tickets')
-      .select('id, title, reported_at, due_at, status, priority')
+      .select('id, title, location, reported_at, due_at, status, priority')
       .order('reported_at', { ascending: false })
       .limit(10),
     supabase
@@ -399,7 +467,7 @@ async function getSignals(): Promise<Signal[]> {
     throw new Error(reviewsError.message)
   }
 
-  const maintenanceSignals = (
+  const maintenanceEvents = (
     (ticketRows as MaintenanceTicketSignalRow[] | null) ?? []
   ).map((ticket) => {
     const severity = getMaintenanceSignalSeverity(ticket)
@@ -407,6 +475,7 @@ async function getSignals(): Promise<Signal[]> {
     return {
       id: `maintenance-${ticket.id}`,
       type: 'maintenance' as const,
+      entity: ticket.location || ticket.title,
       severity,
       timestamp: ticket.reported_at,
       label:
@@ -418,13 +487,15 @@ async function getSignals(): Promise<Signal[]> {
     }
   })
 
-  const expenseSignals = ((expenseRows as ExpenseSignalRow[] | null) ?? []).map(
+  const expenseEvents = ((expenseRows as ExpenseSignalRow[] | null) ?? []).map(
     (expense) => {
       const severity = getExpenseSignalSeverity(expense)
 
       return {
         id: `expense-${expense.id}`,
         type: 'expense' as const,
+        entity:
+          severity === 'warning' ? 'Expense approvals' : 'Operating spend',
         severity,
         timestamp: expense.created_at,
         label:
@@ -435,13 +506,14 @@ async function getSignals(): Promise<Signal[]> {
     },
   )
 
-  const reputationSignals = ((reviewRows as ReviewSignalRow[] | null) ?? []).map(
+  const reputationEvents = ((reviewRows as ReviewSignalRow[] | null) ?? []).map(
     (review) => {
       const severity = getReviewSignalSeverity(review)
 
       return {
         id: `reputation-${review.id}`,
         type: 'reputation' as const,
+        entity: severity === 'normal' ? 'Guest feedback' : 'Guest complaints',
         severity,
         timestamp: review.reviewed_at,
         label:
@@ -452,10 +524,10 @@ async function getSignals(): Promise<Signal[]> {
     },
   )
 
-  return sortSignals([
-    ...maintenanceSignals,
-    ...expenseSignals,
-    ...reputationSignals,
+  return sortEvents([
+    ...maintenanceEvents,
+    ...expenseEvents,
+    ...reputationEvents,
   ])
 }
 
@@ -485,17 +557,18 @@ export function Dashboard() {
   const modules = navigationItems.filter((item) => item.to !== '/')
   const [kpis, setKpis] = useState<DashboardKpis>(emptyKpis)
   const [alerts, setAlerts] = useState<AlertItem[]>([])
-  const [signals, setSignals] = useState<Signal[]>([])
+  const [events, setEvents] = useState<Event[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const priorityActions = buildPriorityActions(kpis, alerts)
-  const criticalSignalsCount = signals.filter(
-    (signal) => signal.severity === 'critical',
+  const criticalEventsCount = events.filter(
+    (event) => event.severity === 'critical',
   ).length
-  const warningSignalsCount = signals.filter(
-    (signal) => signal.severity === 'warning',
+  const warningEventsCount = events.filter(
+    (event) => event.severity === 'warning',
   ).length
-  const topSignals = signals.slice(0, 10)
+  const timelineEvents = sortEvents(events).slice(0, 10)
+  const timelineGroups = groupEvents(timelineEvents)
 
   useEffect(() => {
     let isCancelled = false
@@ -532,16 +605,16 @@ export function Dashboard() {
           return
         }
 
-        const [nextKpis, nextAlerts, nextSignals] = await Promise.all([
+        const [nextKpis, nextAlerts, nextEvents] = await Promise.all([
           getKpis(),
           getAlerts(),
-          getSignals(),
+          getEvents(),
         ])
 
         if (!isCancelled) {
           setKpis(nextKpis)
           setAlerts(nextAlerts)
-          setSignals(nextSignals)
+          setEvents(nextEvents)
         }
       } catch (error) {
         console.error('Unable to load dashboard data', error)
@@ -614,7 +687,7 @@ export function Dashboard() {
           <div className="grid gap-4 md:grid-cols-2">
             <div className="rounded-2xl border border-slate-200 bg-white/70 px-4 py-4">
               <p className="text-2xl font-semibold tracking-tight text-slate-950">
-                {criticalSignalsCount}
+                {criticalEventsCount}
               </p>
               <p className="mt-1 text-sm font-semibold text-slate-700">
                 Critical signals
@@ -623,7 +696,7 @@ export function Dashboard() {
 
             <div className="rounded-2xl border border-slate-200 bg-white/70 px-4 py-4">
               <p className="text-2xl font-semibold tracking-tight text-slate-950">
-                {warningSignalsCount}
+                {warningEventsCount}
               </p>
               <p className="mt-1 text-sm font-semibold text-slate-700">
                 Warning signals
@@ -683,36 +756,64 @@ export function Dashboard() {
         </SurfaceCard>
 
         <SurfaceCard
-          title="Live feed"
-          description="Top operational signals ranked by severity and freshness."
+          title="Operational timeline"
+          description="Latest events grouped by entity to surface active incidents and ongoing operational threads."
           className="h-full"
         >
           {isLoading ? (
-            <p className="text-sm text-slate-600">Loading live feed...</p>
-          ) : topSignals.length > 0 ? (
-            <ul className="space-y-3">
-              {topSignals.map((signal) => (
-                <li
-                  key={signal.id}
-                  className="flex flex-col gap-1 border-b border-slate-100 pb-3 last:border-0 last:pb-0 md:flex-row md:items-baseline md:justify-between"
-                >
-                  <div className="space-y-1">
+            <p className="text-sm text-slate-600">Loading timeline...</p>
+          ) : timelineGroups.length > 0 ? (
+            <div className="space-y-5">
+              {timelineGroups.map((group) => (
+                <div key={group.id} className="space-y-3 border-b border-slate-100 pb-4 last:border-0 last:pb-0">
+                  <div className="flex flex-wrap items-center gap-2">
                     <span className="inline-flex rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-600">
-                      {signal.type}
+                      {group.type}
                     </span>
-                    <p className="text-sm font-medium text-slate-900">
-                      {signal.label}
+                    <p className="text-sm font-semibold text-slate-900">
+                      {group.entity}
                     </p>
+                    {group.isIncident ? (
+                      <span className="inline-flex rounded-full bg-red-50 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-red-600">
+                        Incident
+                      </span>
+                    ) : null}
                   </div>
-                  <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-                    {formatActivityTime(signal.timestamp)}
-                  </span>
-                </li>
+
+                  <div className="relative space-y-3 pl-5">
+                    <span className="absolute bottom-0 left-[7px] top-1 w-px bg-slate-200" />
+                    {group.events.map((event) => (
+                      <div key={event.id} className="relative">
+                        <span className="absolute left-[-20px] top-2.5 h-3 w-3 rounded-full border-2 border-white bg-slate-300 shadow-sm" />
+                        <div className="rounded-2xl bg-white/70 px-4 py-3">
+                          <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+                            <div className="space-y-2">
+                              <p className="text-sm font-medium text-slate-900">
+                                {event.label}
+                              </p>
+                              <span
+                                className={[
+                                  'inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.18em]',
+                                  getSeverityToneClasses(event.severity),
+                                ].join(' ')}
+                              >
+                                {getSeverityLabel(event.severity)}
+                              </span>
+                            </div>
+                            <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                              {formatActivityTime(event.timestamp)}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
               ))}
-            </ul>
+            </div>
           ) : (
             <p className="text-sm leading-7 text-slate-600">
-              No live operational signals recorded yet.
+              No operational timeline events recorded yet.
             </p>
           )}
         </SurfaceCard>
