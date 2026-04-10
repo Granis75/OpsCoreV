@@ -1,21 +1,12 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { Link } from 'react-router-dom'
 import { PageSection } from '../components/ui/PageSection'
 import { SurfaceCard } from '../components/ui/SurfaceCard'
-import { VendorStatusBadge } from '../components/vendors/VendorStatusBadge'
+import { ActionDrawer } from '../components/ui/ActionDrawer'
 import { isSupabaseConfigured, supabase } from '../lib/supabase'
 import type { VendorStatus } from '../types/vendors'
 
-type DirectoryTab = 'staff' | 'vendors'
 type StaffEmploymentStatus = 'active' | 'on_leave' | 'inactive'
-type CreateMode = 'staff' | 'vendor'
-
 interface StaffRoleRow {
-  id: string
-  name: string
-}
-
-interface VendorCategoryRow {
   id: string
   name: string
 }
@@ -28,15 +19,6 @@ interface StaffRecord {
   phone: string | null
   employment_status: StaffEmploymentStatus
   staff_role_id: string | null
-}
-
-interface VendorRecord {
-  id: string
-  name: string
-  phone: string | null
-  email: string | null
-  status: VendorStatus
-  vendor_category_id: string | null
 }
 
 interface DirectoryFormState {
@@ -124,17 +106,18 @@ const emptyForm: DirectoryFormState = {
 }
 
 export function Directory() {
-  const [activeTab, setActiveTab] = useState<DirectoryTab>('staff')
+  if (!supabase) return null
+  const db = supabase
+
   const [staff, setStaff] = useState<StaffRecord[]>([])
-  const [vendors, setVendors] = useState<VendorRecord[]>([])
   const [staffRoleMap, setStaffRoleMap] = useState<Map<string, string>>(new Map())
-  const [vendorCategoryMap, setVendorCategoryMap] = useState<Map<string, string>>(new Map())
   const [isLoading, setIsLoading] = useState(true)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
-  const [createMode, setCreateMode] = useState<CreateMode | null>(null)
+  const [createMode, setCreateMode] = useState<boolean>(false)
   const [formState, setFormState] = useState<DirectoryFormState>(emptyForm)
   const [formError, setFormError] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [selectedStaffId, setSelectedStaffId] = useState<string | null>(null)
 
   async function loadDirectory() {
     if (!isSupabaseConfigured) {
@@ -154,8 +137,6 @@ export function Directory() {
       const [
         { data: staffRows, error: staffError },
         { data: roleRows, error: rolesError },
-        { data: vendorRows, error: vendorsError },
-        { data: categoryRows, error: categoriesError },
       ] = await Promise.all([
         client
           .from('staff_directory')
@@ -164,45 +145,14 @@ export function Directory() {
           )
           .order('last_name', { ascending: true }),
         client.from('staff_roles').select('id, name').order('name', { ascending: true }),
-        client
-          .from('vendors')
-          .select('id, name, phone, email, status, vendor_category_id')
-          .order('name', { ascending: true }),
-        client
-          .from('vendor_categories')
-          .select('id, name')
-          .order('name', { ascending: true }),
       ])
 
-      if (staffError) {
-        throw staffError
-      }
-
-      if (rolesError) {
-        throw rolesError
-      }
-
-      if (vendorsError) {
-        throw vendorsError
-      }
-
-      if (categoriesError) {
-        throw categoriesError
-      }
-
+      if (staffError) throw staffError
+      if (rolesError) throw rolesError
       setStaff((staffRows as StaffRecord[] | null) ?? [])
-      setVendors((vendorRows as VendorRecord[] | null) ?? [])
       setStaffRoleMap(
         new Map(
           ((roleRows as StaffRoleRow[] | null) ?? []).map((role) => [role.id, role.name]),
-        ),
-      )
-      setVendorCategoryMap(
-        new Map(
-          ((categoryRows as VendorCategoryRow[] | null) ?? []).map((category) => [
-            category.id,
-            category.name,
-          ]),
         ),
       )
     } catch (error) {
@@ -257,44 +207,6 @@ export function Directory() {
     return insertedRole.id
   }
 
-  async function getOrCreateVendorCategoryId(categoryName: string, organizationId: string) {
-    const normalizedCategoryName = categoryName.trim()
-
-    if (!normalizedCategoryName || !supabase) {
-      return null
-    }
-
-    const { data: existingCategory, error: existingCategoryError } = await supabase
-      .from('vendor_categories')
-      .select('id')
-      .eq('organization_id', organizationId)
-      .eq('name', normalizedCategoryName)
-      .maybeSingle()
-
-    if (existingCategoryError) {
-      throw existingCategoryError
-    }
-
-    if (existingCategory?.id) {
-      return existingCategory.id
-    }
-
-    const { data: insertedCategory, error: insertedCategoryError } = await supabase
-      .from('vendor_categories')
-      .insert({
-        organization_id: organizationId,
-        name: normalizedCategoryName,
-      })
-      .select('id')
-      .single()
-
-    if (insertedCategoryError) {
-      throw insertedCategoryError
-    }
-
-    return insertedCategory.id
-  }
-
   async function handleCreate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
 
@@ -308,7 +220,6 @@ export function Directory() {
     try {
       const { client, organizationId } = await getAuthenticatedContext()
 
-      if (createMode === 'staff') {
         const { firstName, lastName } = splitFullName(formState.name)
         const staffRoleId = await getOrCreateStaffRoleId(formState.role, organizationId)
 
@@ -325,27 +236,8 @@ export function Directory() {
         if (error) {
           throw error
         }
-      } else {
-        const vendorCategoryId = await getOrCreateVendorCategoryId(
-          formState.role,
-          organizationId,
-        )
 
-        const { error } = await client.from('vendors').insert({
-          organization_id: organizationId,
-          vendor_category_id: vendorCategoryId,
-          name: formState.name.trim(),
-          phone: formState.phone.trim() || null,
-          email: formState.email.trim() || null,
-          status: 'active',
-        })
-
-        if (error) {
-          throw error
-        }
-      }
-
-      setCreateMode(null)
+      setCreateMode(false)
       setFormState(emptyForm)
       await loadDirectory()
     } catch (error) {
@@ -358,153 +250,70 @@ export function Directory() {
     }
   }
 
-  const visibleStaff = staff
-  const visibleVendors = vendors
-
   return (
     <PageSection
       title="Directory"
-      description="Shared operational directory for internal staff and external vendors, with lightweight creation and contact access."
+      description="Internal staff directory with operational profiles and active task tracking."
     >
       <SurfaceCard
-        title="Directory"
-        description="Switch between staff and vendors to manage the people and partners involved in daily operations."
+        title="Staff"
+        description="Manage the internal team involved in daily operations."
       >
-        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-          <div className="inline-flex w-fit rounded-full border border-slate-200 bg-slate-100 p-1">
-            {(['staff', 'vendors'] as DirectoryTab[]).map((tab) => (
+        <div className="flex justify-end">
               <button
-                key={tab}
-                type="button"
-                onClick={() => setActiveTab(tab)}
-                className={[
-                  'rounded-full px-4 py-2 text-sm font-medium capitalize transition-all duration-150',
-                  activeTab === tab
-                    ? 'bg-white text-slate-950 shadow-sm'
-                    : 'text-slate-600 hover:-translate-y-px hover:text-slate-950',
-                ].join(' ')}
-              >
-                {tab}
-              </button>
-            ))}
-          </div>
-
-          <button
             type="button"
             onClick={() => {
-              setCreateMode(activeTab === 'staff' ? 'staff' : 'vendor')
+              setCreateMode(true)
               setFormError(null)
-              setFormState(emptyForm)
-            }}
+                      setFormState(emptyForm)
+                    }}
             className="button-primary"
-          >
-            {activeTab === 'staff' ? 'New staff member' : 'New vendor'}
-          </button>
+                  >
+            New staff member
+                  </button>
+                </div>
+
+        <div className="mt-6 divide-y divide-slate-100">
+          {!isLoading && !errorMessage ? (
+            staff.map((member) => (
+              <button
+                key={member.id}
+                type="button"
+                onClick={() => setSelectedStaffId(member.id)}
+                className="grid w-full gap-3 rounded-2xl px-3 py-4 text-left transition-all hover:bg-slate-50 md:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_auto] md:items-center"
+              >
+                <div className="space-y-1">
+                  <p className="text-sm font-semibold text-slate-950">{buildStaffName(member)}</p>
+                  <p className="text-sm text-slate-600">
+                    {staffRoleMap.get(member.staff_role_id ?? '') ?? 'Role not assigned'}
+                  </p>
         </div>
-
-        <div className="mt-6">
-          {isLoading ? (
-            <p className="text-sm leading-7 text-slate-600">Loading directory...</p>
-          ) : null}
-
-          {!isLoading && errorMessage ? (
-            <p className="text-sm leading-7 text-slate-600">{errorMessage}</p>
-          ) : null}
-
-          {!isLoading && !errorMessage && activeTab === 'staff' ? (
-            visibleStaff.length > 0 ? (
-              <div className="divide-y divide-slate-100">
-                {visibleStaff.map((member) => (
-                  <Link
-                    key={member.id}
-                    to={`/app/directory/staff/${member.id}`}
-                    className="grid gap-3 rounded-2xl px-3 py-4 transition-all duration-150 hover:-translate-y-px hover:bg-white/80 hover:shadow-sm md:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_auto] md:items-center"
-                  >
-                    <div className="space-y-1">
-                      <p className="text-sm font-semibold text-slate-950">
-                        {buildStaffName(member)}
-                      </p>
-                      <p className="text-sm text-slate-600">
-                        {member.staff_role_id
-                          ? staffRoleMap.get(member.staff_role_id) ?? 'Role not assigned'
-                          : 'Role not assigned'}
-                      </p>
-                    </div>
-
-                    <div className="space-y-1 text-sm text-slate-600">
-                      <p>{member.phone ?? 'No phone recorded'}</p>
-                      <p>{member.work_email ?? 'No email recorded'}</p>
-                    </div>
-
-                    <span
-                      className={[
-                        'inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-semibold capitalize',
-                        getStaffStatusClasses(member.employment_status),
-                      ].join(' ')}
-                    >
-                      {getStaffStatusLabel(member.employment_status)}
-                    </span>
-                  </Link>
-                ))}
-              </div>
-            ) : (
-              <p className="text-sm leading-7 text-slate-600">No staff recorded</p>
-            )
-          ) : null}
-
-          {!isLoading && !errorMessage && activeTab === 'vendors' ? (
-            visibleVendors.length > 0 ? (
-              <div className="divide-y divide-slate-100">
-                {visibleVendors.map((vendor) => (
-                  <Link
-                    key={vendor.id}
-                    to={`/app/vendors/${vendor.id}`}
-                    className="grid gap-3 rounded-2xl px-3 py-4 transition-all duration-150 hover:-translate-y-px hover:bg-white/80 hover:shadow-sm md:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_auto] md:items-center"
-                  >
-                    <div className="space-y-1">
-                      <p className="text-sm font-semibold text-slate-950">
-                        {vendor.name}
-                      </p>
-                      <p className="text-sm text-slate-600">
-                        {vendor.vendor_category_id
-                          ? vendorCategoryMap.get(vendor.vendor_category_id) ?? 'No category assigned'
-                          : 'No category assigned'}
-                      </p>
-                    </div>
-
-                    <div className="space-y-1 text-sm text-slate-600">
-                      <p>{vendor.phone ?? 'No phone recorded'}</p>
-                      <p>{vendor.email ?? 'No email recorded'}</p>
-                    </div>
-
-                    <VendorStatusBadge status={vendor.status} />
-                  </Link>
-                ))}
-              </div>
-            ) : (
-              <p className="text-sm leading-7 text-slate-600">No vendors recorded</p>
-            )
+                <div className="text-sm text-slate-500">{member.work_email}</div>
+                <span className={['rounded-full border px-2.5 py-1 text-xs font-semibold', getStaffStatusClasses(member.employment_status)].join(' ')}>
+                  {getStaffStatusLabel(member.employment_status)}
+                </span>
+              </button>
+            ))
           ) : null}
         </div>
       </SurfaceCard>
+
+      <StaffDetailDrawer
+        staffId={selectedStaffId}
+        onClose={() => setSelectedStaffId(null)}
+      />
 
       {createMode ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/20 px-5">
           <div className="w-full max-w-lg">
             <SurfaceCard
-              title={createMode === 'staff' ? 'New staff member' : 'New vendor'}
-              description={
-                createMode === 'staff'
-                  ? 'Add a staff contact with a lightweight operational profile.'
-                  : 'Add a vendor contact with the minimum directory details.'
-              }
+              title="New staff member"
+              description="Add a staff contact with a lightweight operational profile."
               className="w-full"
             >
               <form className="space-y-4" onSubmit={handleCreate}>
                 <label className="block space-y-2">
-                  <span className="eyebrow-label">
-                    Name
-                  </span>
+                  <span className="eyebrow-label">Name</span>
                   <input
                     type="text"
                     value={formState.name}
@@ -517,9 +326,7 @@ export function Directory() {
                 </label>
 
                 <label className="block space-y-2">
-                  <span className="eyebrow-label">
-                    {createMode === 'staff' ? 'Role' : 'Category'}
-                  </span>
+                  <span className="eyebrow-label">Role</span>
                   <input
                     type="text"
                     value={formState.role}
@@ -531,9 +338,7 @@ export function Directory() {
                 </label>
 
                 <label className="block space-y-2">
-                  <span className="eyebrow-label">
-                    Phone
-                  </span>
+                  <span className="eyebrow-label">Phone</span>
                   <input
                     type="text"
                     value={formState.phone}
@@ -545,9 +350,7 @@ export function Directory() {
                 </label>
 
                 <label className="block space-y-2">
-                  <span className="eyebrow-label">
-                    Email
-                  </span>
+                  <span className="eyebrow-label">Email</span>
                   <input
                     type="email"
                     value={formState.email}
@@ -566,7 +369,7 @@ export function Directory() {
                   <button
                     type="button"
                     onClick={() => {
-                      setCreateMode(null)
+                      setCreateMode(false)
                       setFormError(null)
                       setFormState(emptyForm)
                     }}
@@ -590,3 +393,54 @@ export function Directory() {
     </PageSection>
   )
 }
+
+function StaffDetailDrawer({ staffId, onClose }: { staffId: string | null; onClose: () => void }) {
+  const [details, setDetails] = useState<any>(null)
+  const [activeItems, setActiveItems] = useState<any[]>([])
+
+  useEffect(() => {
+    if (staffId && supabase) {
+      const db = supabase
+      db
+        .from('staff_directory')
+        .select('*, staff_roles(name)')
+        .eq('id', staffId)
+        .single()
+        .then(({ data }) => setDetails(data))
+
+      db
+        .from('operation_items')
+        .select('*')
+        .eq('created_by_profile_id', staffId)
+        .eq('status', 'open')
+        .then(({ data }) => setActiveItems(data ?? []))
+    }
+  }, [staffId])
+
+  return (
+    <ActionDrawer isOpen={!!staffId} onClose={onClose} title="Staff Profile">
+      {details ? (
+        <div className="space-y-6">
+          <div>
+            <p className="eyebrow-label">Contact</p>
+            <p className="text-sm font-medium">{details.first_name} {details.last_name}</p>
+            <p className="text-sm text-slate-500">{details.work_email}</p>
+          </div>
+          <div>
+            <p className="eyebrow-label">Active Operational Items</p>
+            {activeItems.length > 0 ? (
+              <ul className="mt-2 space-y-2">
+                {activeItems.map((item) => (
+                  <li key={item.id} className="text-sm border-l-2 border-slate-200 pl-3 py-1 text-slate-700">
+                    {item.title}
+                  </li>
+                ))}
+              </ul>
+            ) : <p className="text-sm text-slate-500 mt-2 italic">No active items.</p>}
+          </div>
+        </div>
+      ) : <p className="text-sm">Loading...</p>}
+    </ActionDrawer>
+  )
+}
+

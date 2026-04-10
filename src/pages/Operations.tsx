@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { PageSection } from '../components/ui/PageSection'
 import { SurfaceCard } from '../components/ui/SurfaceCard'
+import { ActionDrawer } from '../components/ui/ActionDrawer'
 import { isSupabaseConfigured, supabase } from '../lib/supabase'
 
 type OperationItemType = 'ticket' | 'task' | 'intervention' | 'order'
@@ -700,23 +701,18 @@ export function Operations() {
         </div>
       </SurfaceCard>
 
-      {isCreateOpen ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/25 px-4 py-6 backdrop-blur-sm">
-          <div className="w-full max-w-2xl">
-            <SurfaceCard
+      <ActionDrawer
+        isOpen={isCreateOpen}
+        onClose={closeModal}
               title={editingItemId ? 'Edit operational item' : 'New operational item'}
-              description="Log a real operational activity with the minimum fields needed to track execution."
             >
-              <form className="space-y-4" onSubmit={handleSaveItem}>
-                <div className="grid gap-4 md:grid-cols-3">
+        <form className="space-y-6" onSubmit={handleSaveItem}>
+          <div className="grid gap-4">
                   <div className="space-y-2">
-                    <label
-                      htmlFor="operation-type"
-                      className="eyebrow-label"
-                    >
-                      Type
-                    </label>
-                    <select
+              <label htmlFor="operation-type" className="eyebrow-label">
+                Type
+              </label>
+              <select
                       id="operation-type"
                       value={formState.type}
                       onChange={(event) =>
@@ -725,7 +721,7 @@ export function Operations() {
                           type: event.target.value as OperationItemType,
                         }))
                       }
-                      className="field-input"
+                className="field-input w-full"
                     >
                       <option value="ticket">Ticket</option>
                       <option value="task">Task</option>
@@ -735,12 +731,9 @@ export function Operations() {
                   </div>
 
                   <div className="space-y-2">
-                    <label
-                      htmlFor="operation-priority"
-                      className="eyebrow-label"
-                    >
-                      Priority
-                    </label>
+              <label htmlFor="operation-priority" className="eyebrow-label">
+                Priority
+              </label>
                     <select
                       id="operation-priority"
                       value={formState.priority}
@@ -750,7 +743,7 @@ export function Operations() {
                           priority: event.target.value as OperationItemPriority,
                         }))
                       }
-                      className="field-input"
+                className="field-input w-full"
                     >
                       <option value="critical">Critical</option>
                       <option value="high">High</option>
@@ -760,13 +753,10 @@ export function Operations() {
                   </div>
 
                   <div className="space-y-2">
-                    <label
-                      htmlFor="operation-status"
-                      className="eyebrow-label"
-                    >
-                      Status
-                    </label>
-                    <select
+              <label htmlFor="operation-status" className="eyebrow-label">
+                Status
+              </label>
+              <select
                       id="operation-status"
                       value={formState.status}
                       onChange={(event) =>
@@ -775,7 +765,7 @@ export function Operations() {
                           status: event.target.value as OperationItemStatus,
                         }))
                       }
-                      className="field-input"
+                className="field-input w-full"
                     >
                       <option value="open">Open</option>
                       <option value="in_progress">In progress</option>
@@ -783,16 +773,11 @@ export function Operations() {
                       <option value="done">Done</option>
                     </select>
                   </div>
-                </div>
-
                 <div className="space-y-2">
-                  <label
-                    htmlFor="operation-title"
-                    className="eyebrow-label"
-                  >
-                    Title
-                  </label>
-                  <input
+              <label htmlFor="operation-title" className="eyebrow-label">
+                Title
+              </label>
+              <input
                     id="operation-title"
                     type="text"
                     value={formState.title}
@@ -802,19 +787,15 @@ export function Operations() {
                         title: event.target.value,
                       }))
                     }
-                    className="field-input"
+                className="field-input w-full"
                     placeholder="Room 214 AC follow-up"
                   />
                 </div>
 
-                <div className="grid gap-4 md:grid-cols-2">
-                  <div className="space-y-2">
-                    <label
-                      htmlFor="operation-location"
-                      className="eyebrow-label"
-                    >
-                      Location
-                    </label>
+            <div className="space-y-2">
+              <label htmlFor="operation-location" className="eyebrow-label">
+                Location
+              </label>
                     <input
                       id="operation-location"
                       type="text"
@@ -825,21 +806,17 @@ export function Operations() {
                           location: event.target.value,
                         }))
                       }
-                      className="field-input"
+                className="field-input w-full"
                       placeholder="Room 214"
                     />
                   </div>
 
                   <div className="space-y-2">
-                    <label
-                      htmlFor="operation-notes"
-                      className="eyebrow-label"
-                    >
-                      Notes
-                    </label>
-                    <input
+              <label htmlFor="operation-notes" className="eyebrow-label">
+                Notes
+              </label>
+              <textarea
                       id="operation-notes"
-                      type="text"
                       value={formState.notes}
                       onChange={(event) =>
                         setFormState((currentState) => ({
@@ -847,24 +824,17 @@ export function Operations() {
                           notes: event.target.value,
                         }))
                       }
-                      className="field-input"
-                      placeholder="Waiting for vendor confirmation"
+                className="field-input w-full min-h-[100px]"
+                placeholder="Waiting for vendor confirmation..."
                     />
                   </div>
                 </div>
 
-                <div className="flex flex-col gap-3 pt-2 md:flex-row md:justify-end">
-                  <button
-                    type="button"
-                    onClick={closeModal}
-                    className="button-secondary min-h-11"
-                  >
-                    Cancel
-                  </button>
+          <div className="flex flex-col gap-3 pt-4 border-t border-slate-100">
                   <button
                     type="submit"
                     disabled={isSubmitting}
-                    className="button-primary min-h-11"
+              className="button-primary min-h-11 w-full"
                   >
                     {isSubmitting
                       ? 'Saving...'
@@ -872,12 +842,17 @@ export function Operations() {
                         ? 'Save changes'
                         : 'Create item'}
                   </button>
-                </div>
-              </form>
-            </SurfaceCard>
-          </div>
+            <button
+              type="button"
+              onClick={closeModal}
+              className="button-secondary min-h-11 w-full"
+            >
+              Cancel
+            </button>
         </div>
-      ) : null}
+        </form>
+      </ActionDrawer>
     </PageSection>
   )
 }
+
