@@ -45,7 +45,7 @@ export function ForgotPassword() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50/60 px-5 py-10 md:px-8">
+    <div className="min-h-screen bg-transparent px-5 py-10 md:px-8">
       <div className="mx-auto flex min-h-[calc(100vh-5rem)] max-w-md items-center">
         <SurfaceCard
           title="Forgot password"
@@ -53,17 +53,17 @@ export function ForgotPassword() {
           className="w-full"
         >
           <div className="mb-6 space-y-1.5">
-            <p className="text-[11px] font-medium uppercase tracking-[0.24em] text-slate-400">
+            <p className="eyebrow-label">
               Ops Core V12
             </p>
-            <p className="text-sm text-slate-600">
+            <p className="text-sm leading-6 text-slate-500">
               We’ll send a reset link so you can get back to the workspace quickly.
             </p>
           </div>
 
           <form className="space-y-4" onSubmit={handleSubmit}>
             <label className="block space-y-2">
-              <span className="text-[11px] font-medium uppercase tracking-[0.24em] text-slate-400">
+              <span className="eyebrow-label">
                 Email
               </span>
               <input
@@ -72,7 +72,7 @@ export function ForgotPassword() {
                 onChange={(event) => setEmail(event.target.value)}
                 autoComplete="email"
                 required
-                className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-950 outline-none transition-colors focus:border-slate-950"
+                className="field-input"
               />
             </label>
 
@@ -93,12 +93,12 @@ export function ForgotPassword() {
             <button
               type="submit"
               disabled={isSubmitting || !isSupabaseConfigured}
-              className="inline-flex w-full items-center justify-center rounded-2xl bg-slate-950 px-4 py-3 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+              className="button-primary w-full"
             >
               {isSubmitting ? 'Sending reset email...' : 'Send reset email'}
             </button>
 
-            <p className="text-sm text-slate-600">
+            <p className="text-sm text-slate-500">
               Back to{' '}
               <Link to="/sign-in" className="font-medium text-slate-950">
                 sign in

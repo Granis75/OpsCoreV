@@ -12,16 +12,16 @@ export function PageSection({
   children,
 }: PageSectionProps) {
   return (
-    <section className="space-y-6">
+    <section className="space-y-8 md:space-y-10">
       <div className="space-y-3">
-        <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">
+        <p className="eyebrow-label">
           Module
         </p>
-        <div className="space-y-2">
+        <div className="space-y-2.5">
           <h1 className="text-3xl font-semibold tracking-tight text-slate-950 md:text-4xl">
             {title}
           </h1>
-          <p className="max-w-3xl text-sm leading-7 text-slate-600 md:text-base">
+          <p className="max-w-3xl text-sm leading-6 text-slate-500">
             {description}
           </p>
         </div>

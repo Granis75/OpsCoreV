@@ -5,7 +5,7 @@ import { SurfaceCard } from '../components/ui/SurfaceCard'
 import { isSupabaseConfigured, supabase } from '../lib/supabase'
 
 type OperationItemType = 'ticket' | 'task' | 'intervention' | 'order'
-type OperationItemStatus = 'open' | 'in_progress' | 'done'
+type OperationItemStatus = 'open' | 'in_progress' | 'blocked' | 'done'
 type OperationItemPriority = 'low' | 'medium' | 'high' | 'critical'
 
 type FilterValue<T extends string> = 'all' | T
@@ -44,6 +44,7 @@ const typeLabels: Record<OperationItemType, string> = {
 const statusLabels: Record<OperationItemStatus, string> = {
   open: 'Open',
   in_progress: 'In progress',
+  blocked: 'Blocked',
   done: 'Done',
 }
 
@@ -62,9 +63,10 @@ const priorityRank: Record<OperationItemPriority, number> = {
 }
 
 const statusRank: Record<OperationItemStatus, number> = {
-  open: 0,
-  in_progress: 1,
-  done: 2,
+  blocked: 0,
+  open: 1,
+  in_progress: 2,
+  done: 3,
 }
 
 const defaultFormState: OperationFormState = {
@@ -90,7 +92,12 @@ function isOperationItemType(value: string | null): value is OperationItemType {
 }
 
 function isOperationItemStatus(value: string | null): value is OperationItemStatus {
-  return value === 'open' || value === 'in_progress' || value === 'done'
+  return (
+    value === 'open' ||
+    value === 'in_progress' ||
+    value === 'blocked' ||
+    value === 'done'
+  )
 }
 
 function isOperationItemPriority(value: string | null): value is OperationItemPriority {
@@ -140,12 +147,16 @@ function getPriorityBadgeClasses(priority: OperationItemPriority) {
 }
 
 function getStatusBadgeClasses(status: OperationItemStatus) {
+  if (status === 'blocked') {
+    return 'bg-red-50 text-red-700'
+  }
+
   if (status === 'open') {
-    return 'bg-slate-900 text-white'
+    return 'bg-slate-100 text-slate-700'
   }
 
   if (status === 'in_progress') {
-    return 'bg-slate-100 text-slate-700'
+    return 'bg-amber-50 text-amber-700'
   }
 
   return 'bg-emerald-50 text-emerald-700'
@@ -274,12 +285,12 @@ interface OperationsKpiCardProps {
 
 function OperationsKpiCard({ label, value }: OperationsKpiCardProps) {
   return (
-    <div className="rounded-3xl border border-white/70 bg-white/80 p-5 shadow-shell backdrop-blur">
+    <div className="surface-panel p-5">
       <div className="space-y-2">
         <p className="text-3xl font-semibold tracking-tight text-slate-950">
           {value}
         </p>
-        <p className="text-sm text-slate-600">{label}</p>
+        <p className="text-sm text-slate-500">{label}</p>
       </div>
     </div>
   )
@@ -294,7 +305,7 @@ function OperationQueueItem({ item, onEdit }: OperationQueueItemProps) {
   return (
     <div
       className={[
-        'rounded-2xl border px-3.5 py-3 transition-colors',
+        'rounded-2xl border px-3.5 py-3 transition-all duration-150 hover:-translate-y-px',
         getItemSurfaceClasses(item.priority),
       ].join(' ')}
     >
@@ -348,7 +359,7 @@ function OperationQueueItem({ item, onEdit }: OperationQueueItemProps) {
           <button
             type="button"
             onClick={() => onEdit(item)}
-            className="inline-flex min-h-8 items-center justify-center rounded-full border border-slate-200 bg-white px-3 py-1 text-[11px] font-medium uppercase tracking-[0.2em] text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-950"
+            className="button-pill min-h-8 px-3 py-1 text-[11px] uppercase tracking-[0.2em]"
           >
             Edit
           </button>
@@ -583,7 +594,7 @@ export function Operations() {
                 onChange={(event) =>
                   setTypeFilter(event.target.value as FilterValue<OperationItemType>)
                 }
-                className="min-h-11 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-950 outline-none transition-colors focus:border-slate-950"
+                className="field-input"
               >
                 <option value="all">All types</option>
                 <option value="ticket">Tickets</option>
@@ -597,11 +608,12 @@ export function Operations() {
                 onChange={(event) =>
                   setStatusFilter(event.target.value as FilterValue<OperationItemStatus>)
                 }
-                className="min-h-11 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-950 outline-none transition-colors focus:border-slate-950"
+                className="field-input"
               >
                 <option value="all">All statuses</option>
                 <option value="open">Open</option>
                 <option value="in_progress">In progress</option>
+                <option value="blocked">Blocked</option>
                 <option value="done">Done</option>
               </select>
 
@@ -610,7 +622,7 @@ export function Operations() {
                 onChange={(event) =>
                   setPriorityFilter(event.target.value as FilterValue<OperationItemPriority>)
                 }
-                className="min-h-11 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-950 outline-none transition-colors focus:border-slate-950"
+                className="field-input"
               >
                 <option value="all">All priorities</option>
                 <option value="critical">Critical</option>
@@ -623,7 +635,7 @@ export function Operations() {
                 type="search"
                 value={searchQuery}
                 onChange={(event) => setSearchQuery(event.target.value)}
-                className="min-h-11 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-950 outline-none transition-colors focus:border-slate-950"
+                className="field-input"
                 placeholder="Search title, location, notes"
               />
             </div>
@@ -631,7 +643,7 @@ export function Operations() {
             <button
               type="button"
               onClick={openCreateModal}
-              className="inline-flex min-h-11 items-center justify-center rounded-2xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-slate-800"
+              className="button-primary min-h-11"
             >
               New item
             </button>
@@ -660,7 +672,7 @@ export function Operations() {
                 <button
                   type="button"
                   onClick={openCreateModal}
-                  className="inline-flex min-h-10 items-center justify-center rounded-2xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-slate-800"
+                  className="button-primary min-h-10 px-4 py-2.5"
                 >
                   New item
                 </button>
@@ -700,7 +712,7 @@ export function Operations() {
                   <div className="space-y-2">
                     <label
                       htmlFor="operation-type"
-                      className="text-[11px] font-medium uppercase tracking-[0.24em] text-slate-400"
+                      className="eyebrow-label"
                     >
                       Type
                     </label>
@@ -713,7 +725,7 @@ export function Operations() {
                           type: event.target.value as OperationItemType,
                         }))
                       }
-                      className="min-h-11 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-950 outline-none transition-colors focus:border-slate-950"
+                      className="field-input"
                     >
                       <option value="ticket">Ticket</option>
                       <option value="task">Task</option>
@@ -725,7 +737,7 @@ export function Operations() {
                   <div className="space-y-2">
                     <label
                       htmlFor="operation-priority"
-                      className="text-[11px] font-medium uppercase tracking-[0.24em] text-slate-400"
+                      className="eyebrow-label"
                     >
                       Priority
                     </label>
@@ -738,7 +750,7 @@ export function Operations() {
                           priority: event.target.value as OperationItemPriority,
                         }))
                       }
-                      className="min-h-11 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-950 outline-none transition-colors focus:border-slate-950"
+                      className="field-input"
                     >
                       <option value="critical">Critical</option>
                       <option value="high">High</option>
@@ -750,7 +762,7 @@ export function Operations() {
                   <div className="space-y-2">
                     <label
                       htmlFor="operation-status"
-                      className="text-[11px] font-medium uppercase tracking-[0.24em] text-slate-400"
+                      className="eyebrow-label"
                     >
                       Status
                     </label>
@@ -763,10 +775,11 @@ export function Operations() {
                           status: event.target.value as OperationItemStatus,
                         }))
                       }
-                      className="min-h-11 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-950 outline-none transition-colors focus:border-slate-950"
+                      className="field-input"
                     >
                       <option value="open">Open</option>
                       <option value="in_progress">In progress</option>
+                      <option value="blocked">Blocked</option>
                       <option value="done">Done</option>
                     </select>
                   </div>
@@ -775,7 +788,7 @@ export function Operations() {
                 <div className="space-y-2">
                   <label
                     htmlFor="operation-title"
-                    className="text-[11px] font-medium uppercase tracking-[0.24em] text-slate-400"
+                    className="eyebrow-label"
                   >
                     Title
                   </label>
@@ -789,7 +802,7 @@ export function Operations() {
                         title: event.target.value,
                       }))
                     }
-                    className="min-h-11 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-950 outline-none transition-colors focus:border-slate-950"
+                    className="field-input"
                     placeholder="Room 214 AC follow-up"
                   />
                 </div>
@@ -798,9 +811,9 @@ export function Operations() {
                   <div className="space-y-2">
                     <label
                       htmlFor="operation-location"
-                    className="text-[11px] font-medium uppercase tracking-[0.24em] text-slate-400"
-                  >
-                    Location
+                      className="eyebrow-label"
+                    >
+                      Location
                     </label>
                     <input
                       id="operation-location"
@@ -812,7 +825,7 @@ export function Operations() {
                           location: event.target.value,
                         }))
                       }
-                      className="min-h-11 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-950 outline-none transition-colors focus:border-slate-950"
+                      className="field-input"
                       placeholder="Room 214"
                     />
                   </div>
@@ -820,9 +833,9 @@ export function Operations() {
                   <div className="space-y-2">
                     <label
                       htmlFor="operation-notes"
-                    className="text-[11px] font-medium uppercase tracking-[0.24em] text-slate-400"
-                  >
-                    Notes
+                      className="eyebrow-label"
+                    >
+                      Notes
                     </label>
                     <input
                       id="operation-notes"
@@ -834,7 +847,7 @@ export function Operations() {
                           notes: event.target.value,
                         }))
                       }
-                      className="min-h-11 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-950 outline-none transition-colors focus:border-slate-950"
+                      className="field-input"
                       placeholder="Waiting for vendor confirmation"
                     />
                   </div>
@@ -844,14 +857,14 @@ export function Operations() {
                   <button
                     type="button"
                     onClick={closeModal}
-                    className="inline-flex min-h-11 items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50"
+                    className="button-secondary min-h-11"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
                     disabled={isSubmitting}
-                    className="inline-flex min-h-11 items-center justify-center rounded-2xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+                    className="button-primary min-h-11"
                   >
                     {isSubmitting
                       ? 'Saving...'

@@ -77,18 +77,18 @@ function getTicketSeverity(ticket: MaintenanceTicketRecord): TicketSeverity {
 
 function getSeverityClasses(severity: TicketSeverity) {
   if (severity === 'critical') {
-    return 'border-red-200 bg-red-50/30'
+    return 'border-red-200 bg-red-50/35'
   }
 
   if (severity === 'high') {
-    return 'border-amber-200'
+    return 'border-amber-200 bg-amber-50/30'
   }
 
   if (severity === 'warning') {
-    return 'border-yellow-100'
+    return 'border-amber-100 bg-amber-50/20'
   }
 
-  return 'border-slate-200 bg-white/80'
+  return 'border-slate-200/70 bg-white/80'
 }
 
 function getAgingLabel(ticket: MaintenanceTicketRecord) {
@@ -153,12 +153,12 @@ interface MaintenanceKpiCardProps {
 
 function MaintenanceKpiCard({ label, value }: MaintenanceKpiCardProps) {
   return (
-    <div className="rounded-3xl border border-white/70 bg-white/80 p-6 shadow-shell backdrop-blur">
+    <div className="surface-panel p-6">
       <div className="space-y-2">
         <p className="text-3xl font-semibold tracking-tight text-slate-950 md:text-4xl">
           {value}
         </p>
-        <p className="text-sm font-semibold text-slate-700">{label}</p>
+        <p className="text-sm font-medium text-slate-700">{label}</p>
       </div>
     </div>
   )
@@ -335,7 +335,7 @@ export function Maintenance() {
                 <div
                   key={ticket.id}
                   className={[
-                    'rounded-3xl border p-5 transition-colors',
+                    'rounded-3xl border p-5 transition-all duration-150 hover:-translate-y-px hover:shadow-sm',
                     getSeverityClasses(severity),
                   ].join(' ')}
                 >
@@ -346,10 +346,10 @@ export function Maintenance() {
                           <h2 className="text-lg font-semibold tracking-tight text-slate-950">
                             {ticket.title}
                           </h2>
-                          <span className="rounded-full bg-white/80 px-2.5 py-1 text-xs font-semibold text-slate-600">
+                          <span className="rounded-full bg-white/90 px-2.5 py-1 text-xs font-medium text-slate-600">
                             {statusLabels[ticket.status]}
                           </span>
-                          <span className="rounded-full bg-white/80 px-2.5 py-1 text-xs font-semibold text-slate-600">
+                          <span className="rounded-full bg-white/90 px-2.5 py-1 text-xs font-medium text-slate-600">
                             {priorityLabels[ticket.priority]}
                           </span>
                         </div>

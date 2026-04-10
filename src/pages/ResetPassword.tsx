@@ -123,7 +123,7 @@ export function ResetPassword() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50/60 px-5 py-10 md:px-8">
+    <div className="min-h-screen bg-transparent px-5 py-10 md:px-8">
       <div className="mx-auto flex min-h-[calc(100vh-5rem)] max-w-md items-center">
         <SurfaceCard
           title="Reset password"
@@ -131,10 +131,10 @@ export function ResetPassword() {
           className="w-full"
         >
           <div className="mb-6 space-y-1.5">
-            <p className="text-[11px] font-medium uppercase tracking-[0.24em] text-slate-400">
+            <p className="eyebrow-label">
               Ops Core V12
             </p>
-            <p className="text-sm text-slate-600">
+            <p className="text-sm leading-6 text-slate-500">
               Finish recovery and return to the operational workspace.
             </p>
           </div>
@@ -148,7 +148,7 @@ export function ResetPassword() {
               <p className="text-sm text-rose-600">{errorMessage}</p>
               <Link
                 to="/sign-in"
-                className="inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700"
+                className="button-secondary"
               >
                 Back to sign in
               </Link>
@@ -158,7 +158,7 @@ export function ResetPassword() {
           {!isCheckingRecovery && isReady ? (
             <form className="space-y-4" onSubmit={handleSubmit}>
               <label className="block space-y-2">
-                <span className="text-[11px] font-medium uppercase tracking-[0.24em] text-slate-400">
+                <span className="eyebrow-label">
                   New password
                 </span>
                 <input
@@ -167,12 +167,12 @@ export function ResetPassword() {
                   onChange={(event) => setPassword(event.target.value)}
                   autoComplete="new-password"
                   required
-                  className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-950 outline-none transition-colors focus:border-slate-950"
+                  className="field-input"
                 />
               </label>
 
               <label className="block space-y-2">
-                <span className="text-[11px] font-medium uppercase tracking-[0.24em] text-slate-400">
+                <span className="eyebrow-label">
                   Confirm password
                 </span>
                 <input
@@ -181,7 +181,7 @@ export function ResetPassword() {
                   onChange={(event) => setConfirmPassword(event.target.value)}
                   autoComplete="new-password"
                   required
-                  className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-950 outline-none transition-colors focus:border-slate-950"
+                  className="field-input"
                 />
               </label>
 
@@ -196,7 +196,7 @@ export function ResetPassword() {
               <button
                 type="submit"
                 disabled={isSubmitting || !isSupabaseConfigured}
-                className="inline-flex w-full items-center justify-center rounded-2xl bg-slate-950 px-4 py-3 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+                className="button-primary w-full"
               >
                 {isSubmitting ? 'Updating password...' : 'Update password'}
               </button>
@@ -204,7 +204,7 @@ export function ResetPassword() {
               {successMessage ? (
                 <Link
                   to="/app/vendors"
-                  className="inline-flex w-full items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700"
+                  className="button-secondary w-full"
                 >
                   Continue to vendors
                 </Link>

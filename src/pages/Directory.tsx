@@ -378,10 +378,10 @@ export function Directory() {
                 type="button"
                 onClick={() => setActiveTab(tab)}
                 className={[
-                  'rounded-full px-4 py-2 text-sm font-medium capitalize transition-colors',
+                  'rounded-full px-4 py-2 text-sm font-medium capitalize transition-all duration-150',
                   activeTab === tab
                     ? 'bg-white text-slate-950 shadow-sm'
-                    : 'text-slate-600 hover:text-slate-950',
+                    : 'text-slate-600 hover:-translate-y-px hover:text-slate-950',
                 ].join(' ')}
               >
                 {tab}
@@ -396,7 +396,7 @@ export function Directory() {
               setFormError(null)
               setFormState(emptyForm)
             }}
-            className="inline-flex items-center justify-center rounded-2xl bg-slate-950 px-4 py-3 text-sm font-medium text-white transition-opacity hover:opacity-90"
+            className="button-primary"
           >
             {activeTab === 'staff' ? 'New staff member' : 'New vendor'}
           </button>
@@ -418,7 +418,7 @@ export function Directory() {
                   <Link
                     key={member.id}
                     to={`/app/directory/staff/${member.id}`}
-                    className="grid gap-3 py-4 transition-colors hover:bg-slate-50/80 md:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_auto] md:items-center"
+                    className="grid gap-3 rounded-2xl px-3 py-4 transition-all duration-150 hover:-translate-y-px hover:bg-white/80 hover:shadow-sm md:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_auto] md:items-center"
                   >
                     <div className="space-y-1">
                       <p className="text-sm font-semibold text-slate-950">
@@ -459,7 +459,7 @@ export function Directory() {
                   <Link
                     key={vendor.id}
                     to={`/app/vendors/${vendor.id}`}
-                    className="grid gap-3 py-4 transition-colors hover:bg-slate-50/80 md:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_auto] md:items-center"
+                    className="grid gap-3 rounded-2xl px-3 py-4 transition-all duration-150 hover:-translate-y-px hover:bg-white/80 hover:shadow-sm md:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_auto] md:items-center"
                   >
                     <div className="space-y-1">
                       <p className="text-sm font-semibold text-slate-950">
@@ -502,7 +502,7 @@ export function Directory() {
             >
               <form className="space-y-4" onSubmit={handleCreate}>
                 <label className="block space-y-2">
-                  <span className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+                  <span className="eyebrow-label">
                     Name
                   </span>
                   <input
@@ -512,12 +512,12 @@ export function Directory() {
                       setFormState((current) => ({ ...current, name: event.target.value }))
                     }
                     required
-                    className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none"
+                    className="field-input"
                   />
                 </label>
 
                 <label className="block space-y-2">
-                  <span className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+                  <span className="eyebrow-label">
                     {createMode === 'staff' ? 'Role' : 'Category'}
                   </span>
                   <input
@@ -526,12 +526,12 @@ export function Directory() {
                     onChange={(event) =>
                       setFormState((current) => ({ ...current, role: event.target.value }))
                     }
-                    className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none"
+                    className="field-input"
                   />
                 </label>
 
                 <label className="block space-y-2">
-                  <span className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+                  <span className="eyebrow-label">
                     Phone
                   </span>
                   <input
@@ -540,12 +540,12 @@ export function Directory() {
                     onChange={(event) =>
                       setFormState((current) => ({ ...current, phone: event.target.value }))
                     }
-                    className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none"
+                    className="field-input"
                   />
                 </label>
 
                 <label className="block space-y-2">
-                  <span className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+                  <span className="eyebrow-label">
                     Email
                   </span>
                   <input
@@ -554,7 +554,7 @@ export function Directory() {
                     onChange={(event) =>
                       setFormState((current) => ({ ...current, email: event.target.value }))
                     }
-                    className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none"
+                    className="field-input"
                   />
                 </label>
 
@@ -570,14 +570,14 @@ export function Directory() {
                       setFormError(null)
                       setFormState(emptyForm)
                     }}
-                    className="inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
+                    className="button-secondary"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
                     disabled={isSubmitting}
-                    className="inline-flex items-center justify-center rounded-2xl bg-slate-950 px-4 py-3 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+                    className="button-primary"
                   >
                     {isSubmitting ? 'Saving...' : 'Create'}
                   </button>

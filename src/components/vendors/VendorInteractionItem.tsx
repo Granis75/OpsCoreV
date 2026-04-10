@@ -14,7 +14,7 @@ export function VendorInteractionItem({
   interaction,
 }: VendorInteractionItemProps) {
   return (
-    <li className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+    <li className="surface-muted p-4">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
         <div className="space-y-2">
           <div className="flex flex-wrap items-center gap-2">

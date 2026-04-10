@@ -71,10 +71,10 @@ export function Vendors() {
       >
         <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_220px]">
           <label className="space-y-2">
-            <span className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+            <span className="eyebrow-label">
               Search
             </span>
-            <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+            <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50/80 px-4 py-3 focus-within:border-slate-300 focus-within:bg-white focus-within:ring-1 focus-within:ring-slate-400">
               <Search className="h-4 w-4 text-slate-400" />
               <input
                 type="search"
@@ -87,7 +87,7 @@ export function Vendors() {
           </label>
 
           <label className="space-y-2">
-            <span className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+            <span className="eyebrow-label">
               Status
             </span>
             <select
@@ -95,7 +95,7 @@ export function Vendors() {
               onChange={(event) =>
                 setStatusFilter(event.target.value as 'all' | VendorStatus)
               }
-              className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none"
+              className="field-input"
             >
               <option value="all">All statuses</option>
               {vendorStatuses.map((status) => (

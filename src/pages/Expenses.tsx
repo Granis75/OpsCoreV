@@ -113,13 +113,13 @@ interface ExpenseKpiCardProps {
 
 function ExpenseKpiCard({ label, value, helper }: ExpenseKpiCardProps) {
   return (
-    <div className="rounded-3xl border border-white/70 bg-white/80 p-6 shadow-shell backdrop-blur">
+    <div className="surface-panel p-6">
       <div className="space-y-2">
         <p className="text-3xl font-semibold tracking-tight text-slate-950 md:text-4xl">
           {value}
         </p>
         <div className="space-y-1">
-          <p className="text-sm font-semibold text-slate-700">{label}</p>
+          <p className="text-sm font-medium text-slate-700">{label}</p>
           <p className="text-sm leading-6 text-slate-500">{helper}</p>
         </div>
       </div>
@@ -380,7 +380,7 @@ export function Expenses() {
           type="button"
           onClick={openExpenseModal}
           disabled={!isSupabaseConfigured || categories.length === 0}
-          className="inline-flex min-h-11 items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 shadow-shell transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+          className="button-secondary min-h-11"
         >
           Add expense
         </button>
@@ -485,7 +485,7 @@ export function Expenses() {
                 <div className="space-y-2">
                   <label
                     htmlFor="expense-label"
-                    className="text-sm font-semibold text-slate-700"
+                    className="eyebrow-label"
                   >
                     Label
                   </label>
@@ -499,7 +499,7 @@ export function Expenses() {
                         label: event.target.value,
                       }))
                     }
-                    className="min-h-11 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-slate-300 focus:ring-2 focus:ring-slate-200"
+                    className="field-input"
                     placeholder="Room relocation taxi"
                   />
                 </div>
@@ -508,7 +508,7 @@ export function Expenses() {
                   <div className="space-y-2">
                     <label
                       htmlFor="expense-amount"
-                      className="text-sm font-semibold text-slate-700"
+                      className="eyebrow-label"
                     >
                       Amount
                     </label>
@@ -524,7 +524,7 @@ export function Expenses() {
                           amount: event.target.value,
                         }))
                       }
-                      className="min-h-11 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-slate-300 focus:ring-2 focus:ring-slate-200"
+                      className="field-input"
                       placeholder="0.00"
                     />
                   </div>
@@ -532,7 +532,7 @@ export function Expenses() {
                   <div className="space-y-2">
                     <label
                       htmlFor="expense-category"
-                      className="text-sm font-semibold text-slate-700"
+                      className="eyebrow-label"
                     >
                       Category
                     </label>
@@ -545,7 +545,7 @@ export function Expenses() {
                           expenseCategoryId: event.target.value,
                         }))
                       }
-                      className="min-h-11 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-slate-300 focus:ring-2 focus:ring-slate-200"
+                      className="field-input"
                     >
                       <option value="">Select category</option>
                       {categories.map((category) => (
@@ -561,14 +561,14 @@ export function Expenses() {
                   <button
                     type="button"
                     onClick={() => setIsModalOpen(false)}
-                    className="inline-flex min-h-11 items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50"
+                    className="button-secondary min-h-11"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
                     disabled={isSubmitting || categories.length === 0}
-                    className="inline-flex min-h-11 items-center justify-center rounded-2xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+                    className="button-primary min-h-11"
                   >
                     {isSubmitting ? 'Saving...' : 'Save expense'}
                   </button>

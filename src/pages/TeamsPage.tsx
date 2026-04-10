@@ -171,7 +171,7 @@ function SectionCard({
     <SurfaceCard
       title={title}
       description={description}
-      className="border-slate-200 bg-white shadow-sm"
+      className="border-slate-200/70 bg-white/95"
     >
       {children}
     </SurfaceCard>
@@ -522,14 +522,14 @@ export function TeamsPage() {
           description="Core operating units, their live load and the handoffs shaping day-to-day execution."
         >
           {errorMessage ? (
-            <div className="rounded-3xl border border-slate-200 bg-slate-50/70 p-5">
+            <div className="surface-muted p-5">
               <div className="flex items-start gap-3">
                 <AlertCircle className="mt-0.5 h-4 w-4 text-slate-400" />
                 <p className="text-sm leading-6 text-slate-600">{errorMessage}</p>
               </div>
             </div>
           ) : isLoading ? (
-            <div className="rounded-3xl border border-slate-200 bg-slate-50/70 p-5">
+            <div className="surface-muted p-5">
               <p className="text-sm leading-6 text-slate-500">
                 Loading live team structure and workload.
               </p>
@@ -539,7 +539,7 @@ export function TeamsPage() {
               {teams.map((team) => (
                 <article
                   key={team.id}
-                  className="rounded-3xl border border-slate-200 bg-slate-50/60 p-5"
+                  className="surface-panel p-5"
                 >
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div className="space-y-1">
@@ -576,24 +576,24 @@ export function TeamsPage() {
                   </div>
 
                   <div className="mt-4 grid gap-3 md:grid-cols-3">
-                    <div className="rounded-2xl bg-white px-3 py-3">
-                      <p className="text-[11px] uppercase tracking-[0.18em] text-slate-400">
+                    <div className="surface-muted px-3 py-3">
+                      <p className="eyebrow-label">
                         Open items
                       </p>
                       <p className="mt-1 text-sm font-semibold text-slate-900">
                         {team.openItemsCount}
                       </p>
                     </div>
-                    <div className="rounded-2xl bg-white px-3 py-3">
-                      <p className="text-[11px] uppercase tracking-[0.18em] text-slate-400">
+                    <div className="surface-muted px-3 py-3">
+                      <p className="eyebrow-label">
                         In progress
                       </p>
                       <p className="mt-1 text-sm font-semibold text-slate-900">
                         {team.inProgressItemsCount}
                       </p>
                     </div>
-                    <div className="rounded-2xl bg-white px-3 py-3">
-                      <p className="text-[11px] uppercase tracking-[0.18em] text-slate-400">
+                    <div className="surface-muted px-3 py-3">
+                      <p className="eyebrow-label">
                         Blocked
                       </p>
                       <p
@@ -611,7 +611,7 @@ export function TeamsPage() {
 
                   <div className="mt-4 grid gap-4 md:grid-cols-2">
                     <div className="space-y-1.5">
-                      <p className="text-[11px] uppercase tracking-[0.18em] text-slate-400">
+                      <p className="eyebrow-label">
                         Focus
                       </p>
                       <p className="text-sm leading-6 text-slate-700">
@@ -619,7 +619,7 @@ export function TeamsPage() {
                       </p>
                     </div>
                     <div className="space-y-1.5">
-                      <p className="text-[11px] uppercase tracking-[0.18em] text-slate-400">
+                      <p className="eyebrow-label">
                         Handoff rule
                       </p>
                       <p className="text-sm leading-6 text-slate-700">
@@ -631,7 +631,7 @@ export function TeamsPage() {
               ))}
             </div>
           ) : (
-            <div className="rounded-3xl border border-slate-200 bg-slate-50/70 p-5">
+            <div className="surface-muted p-5">
               <p className="text-sm leading-6 text-slate-500">
                 Team structure is ready and will appear here as soon as the first
                 team is active in the workspace.
@@ -645,13 +645,13 @@ export function TeamsPage() {
           description="Operational ownership kept intentionally narrow so teams can execute clearly without turning this workspace into HR software."
         >
           {errorMessage ? (
-            <div className="rounded-3xl border border-slate-200 bg-slate-50/70 p-5">
+            <div className="surface-muted p-5">
               <p className="text-sm leading-6 text-slate-500">
                 Live role ownership is temporarily unavailable.
               </p>
             </div>
           ) : isLoading ? (
-            <div className="rounded-3xl border border-slate-200 bg-slate-50/70 p-5">
+            <div className="surface-muted p-5">
               <p className="text-sm leading-6 text-slate-500">
                 Loading role ownership and staffing coverage.
               </p>
@@ -661,14 +661,14 @@ export function TeamsPage() {
               {roles.map((role) => (
                 <article
                   key={role.id}
-                  className="rounded-3xl border border-slate-200 bg-white p-4"
+                  className="surface-muted p-4"
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="space-y-1">
                       <h3 className="text-base font-semibold tracking-tight text-slate-950">
                         {role.title}
                       </h3>
-                      <p className="text-[11px] uppercase tracking-[0.18em] text-slate-400">
+                      <p className="eyebrow-label">
                         {role.scope}
                       </p>
                     </div>
@@ -686,7 +686,7 @@ export function TeamsPage() {
               ))}
             </div>
           ) : (
-            <div className="rounded-3xl border border-slate-200 bg-slate-50/70 p-5">
+            <div className="surface-muted p-5">
               <p className="text-sm leading-6 text-slate-500">
                 Role ownership will appear here once the first operational roles
                 are active.
@@ -701,13 +701,13 @@ export function TeamsPage() {
         description="Recent coordination work pulled from live operation items so teams can align around what is moving now."
       >
         {errorMessage ? (
-          <div className="rounded-3xl border border-slate-200 bg-slate-50/70 p-5">
+          <div className="surface-muted p-5">
             <p className="text-sm leading-6 text-slate-500">
               Recent coordination signals are unavailable right now.
             </p>
           </div>
         ) : isLoading ? (
-          <div className="rounded-3xl border border-slate-200 bg-slate-50/70 p-5">
+          <div className="surface-muted p-5">
             <p className="text-sm leading-6 text-slate-500">
               Loading recent coordination activity.
             </p>
@@ -717,12 +717,12 @@ export function TeamsPage() {
             {coordinationItems.map((item) => (
               <article
                 key={item.id}
-                className="rounded-3xl border border-slate-200 bg-slate-50/60 p-5"
+                className="surface-panel p-5"
               >
                 <div className="space-y-4">
                   <div className="flex items-start justify-between gap-3">
                     <div className="space-y-2">
-                      <p className="text-[11px] uppercase tracking-[0.18em] text-slate-400">
+                      <p className="eyebrow-label">
                         {typeLabels[item.type]}
                       </p>
                       <h3 className="text-xl font-semibold tracking-tight text-slate-950">
@@ -752,7 +752,7 @@ export function TeamsPage() {
                   </div>
 
                   <div className="space-y-1.5">
-                    <p className="text-[11px] uppercase tracking-[0.18em] text-slate-400">
+                    <p className="eyebrow-label">
                       Note
                     </p>
                     <p className="text-sm leading-6 text-slate-700">
@@ -760,7 +760,7 @@ export function TeamsPage() {
                     </p>
                   </div>
 
-                  <p className="text-[11px] uppercase tracking-[0.18em] text-slate-400">
+                  <p className="eyebrow-label">
                     {formatCreatedAt(item.createdAt)}
                   </p>
                 </div>
@@ -768,7 +768,7 @@ export function TeamsPage() {
             ))}
           </div>
         ) : (
-          <div className="rounded-3xl border border-slate-200 bg-slate-50/70 p-5">
+          <div className="surface-muted p-5">
             <p className="text-sm leading-6 text-slate-500">
               No active operations — system stable.
             </p>

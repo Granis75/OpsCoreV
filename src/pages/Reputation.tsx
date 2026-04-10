@@ -118,13 +118,13 @@ interface ReputationKpiCardProps {
 
 function ReputationKpiCard({ label, value, helper }: ReputationKpiCardProps) {
   return (
-    <div className="rounded-3xl border border-white/70 bg-white/80 p-6 shadow-shell backdrop-blur">
+    <div className="surface-panel p-6">
       <div className="space-y-2">
         <p className="text-3xl font-semibold tracking-tight text-slate-950 md:text-4xl">
           {value}
         </p>
         <div className="space-y-1">
-          <p className="text-sm font-semibold text-slate-700">{label}</p>
+          <p className="text-sm font-medium text-slate-700">{label}</p>
           <p className="text-sm leading-6 text-slate-500">{helper}</p>
         </div>
       </div>

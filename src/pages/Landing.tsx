@@ -99,7 +99,7 @@ function LandingLabel({ children }: { children: ReactNode }) {
 
 export function Landing() {
   return (
-    <div className="min-h-screen bg-slate-50/60 px-5 py-8 md:px-8 md:py-10">
+    <div className="min-h-screen bg-transparent px-5 py-8 md:px-8 md:py-10">
       <div className="mx-auto max-w-7xl space-y-8">
         <div className="flex items-center justify-between gap-6">
           <div className="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-950 text-sm font-semibold text-white shadow-sm">
@@ -109,13 +109,13 @@ export function Landing() {
           <div className="flex items-center gap-3">
             <Link
               to="/sign-in"
-              className="inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
+              className="button-secondary px-4 py-2.5"
             >
               Sign in
             </Link>
             <Link
               to="/sign-up"
-              className="inline-flex items-center justify-center rounded-2xl bg-slate-950 px-4 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90"
+              className="button-primary px-4 py-2.5"
             >
               Create account
             </Link>
@@ -136,13 +136,13 @@ export function Landing() {
             <div className="mt-8 flex flex-wrap gap-3">
               <Link
                 to="/sign-in"
-                className="inline-flex items-center justify-center rounded-2xl bg-slate-950 px-5 py-3 text-sm font-medium text-white transition-opacity hover:opacity-90"
+                className="button-primary px-5"
               >
                 View work
               </Link>
               <a
                 href="mailto:contact@ops-core.app"
-                className="inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-5 py-3 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
+                className="button-secondary px-5"
               >
                 Contact
               </a>

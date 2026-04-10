@@ -5,7 +5,7 @@
 @layer base {
   :root {
     color: #0f172a;
-    background-color: #f8fafc;
+    background-color: #f5f7fb;
     font-family:
       'Manrope',
       'IBM Plex Sans',
@@ -34,8 +34,9 @@
     min-height: 100vh;
     margin: 0;
     background:
-      radial-gradient(circle at top left, rgba(148, 163, 184, 0.22), transparent 28%),
-      linear-gradient(180deg, #f8fafc 0%, #eef2ff 100%);
+      radial-gradient(circle at top left, rgba(226, 232, 240, 0.85), transparent 28%),
+      radial-gradient(circle at top right, rgba(241, 245, 249, 0.92), transparent 24%),
+      linear-gradient(180deg, #f7f8fb 0%, #eef2f7 100%);
     color: #0f172a;
   }
 
@@ -52,7 +53,46 @@
     text-decoration: none;
   }
 
+  ::selection {
+    background: rgba(148, 163, 184, 0.24);
+    color: #0f172a;
+  }
+
   #root {
     min-height: 100vh;
+  }
+}
+
+@layer components {
+  .surface-panel {
+    @apply rounded-3xl border border-slate-200/70 bg-white/90 shadow-shell backdrop-blur-xl;
+  }
+
+  .surface-muted {
+    @apply rounded-2xl border border-slate-200/70 bg-slate-50/80;
+  }
+
+  .eyebrow-label {
+    @apply text-[11px] font-medium uppercase tracking-[0.24em] text-slate-400;
+  }
+
+  .button-primary {
+    @apply inline-flex items-center justify-center rounded-2xl bg-slate-900 px-4 py-3 text-sm font-medium text-white transition-all duration-150 hover:-translate-y-px hover:bg-slate-800 hover:shadow-shell-hover disabled:cursor-not-allowed disabled:opacity-60;
+  }
+
+  .button-secondary {
+    @apply inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white/90 px-4 py-3 text-sm font-medium text-slate-700 shadow-sm transition-all duration-150 hover:-translate-y-px hover:bg-white hover:shadow-shell-hover disabled:cursor-not-allowed disabled:opacity-60;
+  }
+
+  .button-pill {
+    @apply inline-flex items-center justify-center rounded-full border border-slate-200 bg-white/85 px-3 py-1.5 text-xs font-medium text-slate-700 transition-all duration-150 hover:-translate-y-px hover:bg-white hover:shadow-sm disabled:cursor-not-allowed disabled:opacity-60;
+  }
+
+  .field-input {
+    @apply min-h-11 w-full rounded-2xl border border-slate-200 bg-slate-50/70 px-4 py-3 text-sm text-slate-900 outline-none transition-all duration-150 placeholder:text-slate-400 focus:border-slate-300 focus:bg-white focus:ring-1 focus:ring-slate-400;
+  }
+
+  .interactive-lift {
+    @apply transition-all duration-150 hover:-translate-y-px hover:shadow-shell-hover;
   }
 }

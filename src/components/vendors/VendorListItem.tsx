@@ -11,7 +11,7 @@ export function VendorListItem({ vendor }: VendorListItemProps) {
   return (
     <Link
       to={`/app/vendors/${vendor.id}`}
-      className="block rounded-3xl border border-white/70 bg-white/80 p-5 shadow-shell transition-colors hover:border-slate-300"
+      className="surface-panel interactive-lift block p-5"
     >
       <div className="flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
         <div className="min-w-0 space-y-2">
@@ -33,14 +33,14 @@ export function VendorListItem({ vendor }: VendorListItemProps) {
 
         <div className="grid gap-4 sm:grid-cols-2 xl:min-w-[420px] xl:grid-cols-[auto_minmax(0,1fr)]">
           <div className="space-y-1">
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+            <p className="eyebrow-label">
               Status
             </p>
             <VendorStatusBadge status={vendor.status} />
           </div>
 
           <div className="space-y-1">
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+            <p className="eyebrow-label">
               Phone
             </p>
             <div className="inline-flex items-center gap-2 text-sm font-medium text-slate-700">
