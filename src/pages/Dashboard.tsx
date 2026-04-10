@@ -5,6 +5,7 @@ import { SurfaceCard } from '../components/ui/SurfaceCard'
 import { isSupabaseConfigured, supabase } from '../lib/supabase'
 
 type DashboardModule = 'maintenance' | 'expenses' | 'reputation' | 'operations'
+type ActionModule = 'maintenance' | 'expenses' | 'operations'
 type DashboardSeverity = 'critical' | 'warning' | 'normal'
 type MaintenanceTicketStatus =
   | 'open'
@@ -24,6 +25,13 @@ interface MaintenanceTicketRow {
   status: MaintenanceTicketStatus
   priority: PriorityLevel
   reported_at: string
+  due_at: string | null
+}
+
+interface MaintenanceTicketMetricRow {
+  id: string
+  status: MaintenanceTicketStatus
+  priority: PriorityLevel
   due_at: string | null
 }
 
@@ -55,31 +63,30 @@ interface OperationRow {
   notes: string | null
 }
 
-interface TodaySignal {
+interface DirectorKpis {
+  criticalIssues: number
+  resolutionRate: number
+  pendingSpend: number
+  guestImpact: number
+}
+
+interface CriticalPathItem {
   id: string
-  module: DashboardModule
-  label: string
-  statusLabel: string
-  ctaLabel: 'View' | 'Review' | 'Respond' | 'Open'
+  title: string
+  context: string
+  actionLabel: 'Open'
+  href: string
+  severity: DashboardSeverity
+}
+
+interface AttentionItem {
+  id: string
+  module: ActionModule
+  description: string
+  actionLabel: 'View' | 'Review' | 'Open'
   href: string
   severity: DashboardSeverity
   timestamp: string
-}
-
-interface QueueItem {
-  id: string
-  label: string
-  meta: string
-  statusLabel: string
-  severity: DashboardSeverity
-  href: string
-}
-
-interface QueueBlockData {
-  module: Extract<DashboardModule, 'maintenance' | 'expenses' | 'operations'>
-  count: number
-  href: string
-  items: QueueItem[]
 }
 
 interface ActivityItem {
@@ -92,16 +99,9 @@ interface ActivityItem {
 }
 
 interface DashboardData {
-  todaySignals: TodaySignal[]
-  queueBlocks: QueueBlockData[]
+  criticalPath: CriticalPathItem[]
+  attentionItems: AttentionItem[]
   recentActivity: ActivityItem[]
-}
-
-interface DashboardKpis {
-  openTickets: number
-  criticalTickets: number
-  todayExpenses: number
-  activeVendors: number
 }
 
 const moduleLabels: Record<DashboardModule, string> = {
@@ -111,37 +111,10 @@ const moduleLabels: Record<DashboardModule, string> = {
   operations: 'Operations',
 }
 
-const operationStatusLabels: Record<OperationItemStatus, string> = {
-  open: 'Open',
-  in_progress: 'In progress',
-  done: 'Done',
-}
-
-const maintenanceStatusLabels: Record<MaintenanceTicketStatus, string> = {
-  open: 'Open',
-  in_progress: 'In progress',
-  waiting_vendor: 'Waiting vendor',
-  resolved: 'Resolved',
-  closed: 'Closed',
-}
-
 const severityRank: Record<DashboardSeverity, number> = {
   critical: 0,
   warning: 1,
   normal: 2,
-}
-
-const operationPriorityRank: Record<PriorityLevel, number> = {
-  critical: 0,
-  high: 1,
-  medium: 2,
-  low: 3,
-}
-
-const operationStatusRank: Record<OperationItemStatus, number> = {
-  open: 0,
-  in_progress: 1,
-  done: 2,
 }
 
 function buildHref(
@@ -176,21 +149,19 @@ function getDashboardUserLabel(email: string | null | undefined) {
   return cleaned.replace(/\b\w/g, (letter) => letter.toUpperCase())
 }
 
-function getTodayDateString() {
-  const now = new Date()
-  const year = now.getFullYear()
-  const month = String(now.getMonth() + 1).padStart(2, '0')
-  const day = String(now.getDate()).padStart(2, '0')
-
-  return `${year}-${month}-${day}`
-}
-
 function truncateText(value: string, maxLength = 88) {
   if (value.length <= maxLength) {
     return value
   }
 
   return `${value.slice(0, maxLength - 1)}…`
+}
+
+function normalizeText(value: string) {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
 }
 
 function formatTimestamp(value: string) {
@@ -217,16 +188,38 @@ function formatCurrency(value: number) {
   }).format(value)
 }
 
+function formatPercentage(value: number) {
+  return `${Math.round(value)}%`
+}
+
 function getExpenseAmount(expense: ExpenseRow) {
   return Number(expense.amount ?? 0)
 }
 
-function isFlaggedExpense(expense: ExpenseRow) {
-  return getExpenseAmount(expense) > 200
-}
-
 function getReviewComment(review: ReviewRow) {
   return review.body ?? review.title ?? 'Guest feedback recorded'
+}
+
+function isNegativeReview(review: ReviewRow) {
+  return Number(review.rating ?? 0) <= 3
+}
+
+function isOverdueTicket(ticket: Pick<MaintenanceTicketRow, 'due_at' | 'status'>) {
+  if (!ticket.due_at || ticket.status === 'resolved' || ticket.status === 'closed') {
+    return false
+  }
+
+  const dueAt = new Date(ticket.due_at)
+
+  return !Number.isNaN(dueAt.getTime()) && dueAt.getTime() < Date.now()
+}
+
+function isBlockingTicket(ticket: MaintenanceTicketRow | MaintenanceTicketMetricRow) {
+  return (
+    ticket.status !== 'resolved' &&
+    ticket.status !== 'closed' &&
+    (ticket.priority === 'critical' || isOverdueTicket(ticket))
+  )
 }
 
 function getMaintenanceSeverity(ticket: MaintenanceTicketRow): DashboardSeverity {
@@ -234,23 +227,19 @@ function getMaintenanceSeverity(ticket: MaintenanceTicketRow): DashboardSeverity
     return 'critical'
   }
 
-  if (ticket.due_at) {
-    const dueAt = new Date(ticket.due_at)
-
-    if (!Number.isNaN(dueAt.getTime()) && dueAt.getTime() < Date.now()) {
-      return 'warning'
-    }
+  if (isOverdueTicket(ticket)) {
+    return 'warning'
   }
 
   return 'normal'
 }
 
 function getExpenseSeverity(expense: ExpenseRow): DashboardSeverity {
-  if (expense.status === 'submitted' && isFlaggedExpense(expense)) {
+  if (expense.status === 'submitted' && getExpenseAmount(expense) > 200) {
     return 'critical'
   }
 
-  if (expense.status === 'submitted' || isFlaggedExpense(expense)) {
+  if (expense.status === 'submitted') {
     return 'warning'
   }
 
@@ -277,8 +266,8 @@ function getOperationSeverity(item: OperationRow): DashboardSeverity {
   }
 
   if (
-    (item.priority === 'high' || item.status === 'open') &&
-    item.status !== 'done'
+    item.status !== 'done' &&
+    (item.priority === 'high' || item.status === 'open')
   ) {
     return 'warning'
   }
@@ -286,7 +275,9 @@ function getOperationSeverity(item: OperationRow): DashboardSeverity {
   return 'normal'
 }
 
-function sortSignals(items: TodaySignal[]) {
+function sortBySeverityAndTime<T extends { severity: DashboardSeverity; timestamp: string }>(
+  items: T[],
+) {
   return [...items].sort((left, right) => {
     const severityDifference = severityRank[left.severity] - severityRank[right.severity]
 
@@ -305,53 +296,6 @@ function sortRecentActivity(items: ActivityItem[]) {
   )
 }
 
-function sortOperationRows(items: OperationRow[]) {
-  return [...items].sort((left, right) => {
-    const priorityDifference =
-      operationPriorityRank[left.priority] - operationPriorityRank[right.priority]
-
-    if (priorityDifference !== 0) {
-      return priorityDifference
-    }
-
-    const statusDifference =
-      operationStatusRank[left.status] - operationStatusRank[right.status]
-
-    if (statusDifference !== 0) {
-      return statusDifference
-    }
-
-    return new Date(right.created_at).getTime() - new Date(left.created_at).getTime()
-  })
-}
-
-function sortMaintenanceRows(items: MaintenanceTicketRow[]) {
-  return [...items].sort((left, right) => {
-    const severityDifference =
-      severityRank[getMaintenanceSeverity(left)] -
-      severityRank[getMaintenanceSeverity(right)]
-
-    if (severityDifference !== 0) {
-      return severityDifference
-    }
-
-    return new Date(right.reported_at).getTime() - new Date(left.reported_at).getTime()
-  })
-}
-
-function sortExpenseRows(items: ExpenseRow[]) {
-  return [...items].sort((left, right) => {
-    const severityDifference =
-      severityRank[getExpenseSeverity(left)] - severityRank[getExpenseSeverity(right)]
-
-    if (severityDifference !== 0) {
-      return severityDifference
-    }
-
-    return new Date(right.created_at).getTime() - new Date(left.created_at).getTime()
-  })
-}
-
 function getToneClasses(severity: DashboardSeverity) {
   if (severity === 'critical') {
     return 'bg-red-50 text-red-600'
@@ -364,218 +308,241 @@ function getToneClasses(severity: DashboardSeverity) {
   return 'bg-slate-100 text-slate-600'
 }
 
-async function getKpis(): Promise<DashboardKpis> {
+function getSeverityLabel(severity: DashboardSeverity) {
+  if (severity === 'critical') {
+    return 'Critical'
+  }
+
+  if (severity === 'warning') {
+    return 'Warning'
+  }
+
+  return 'Normal'
+}
+
+function getLinkedComplaintCount(ticket: MaintenanceTicketRow, reviews: ReviewRow[]) {
+  const normalizedTicket = normalizeText(`${ticket.title} ${ticket.location}`)
+  const roomMatches = normalizedTicket.match(/\b\d{3,4}\b/g) ?? []
+
+  return reviews.filter((review) => {
+    if (!isNegativeReview(review)) {
+      return false
+    }
+
+    const reviewText = normalizeText(`${review.title ?? ''} ${getReviewComment(review)}`)
+
+    if (roomMatches.some((room) => reviewText.includes(room))) {
+      return true
+    }
+
+    const fallbackKeywords = [
+      'clim',
+      'ventilation',
+      'ascenseur',
+      'eau',
+      'humidite',
+      'badge',
+      'serrure',
+      'linge',
+      'eclairage',
+    ]
+
+    return fallbackKeywords.some(
+      (keyword) => normalizedTicket.includes(keyword) && reviewText.includes(keyword),
+    )
+  }).length
+}
+
+async function getKpis(): Promise<DirectorKpis> {
   if (!supabase) {
     throw new Error('Supabase client is not configured.')
   }
 
-  const today = getTodayDateString()
-
   const [
-    { count: openTicketsCount, error: openTicketsError },
-    { count: criticalTicketsCount, error: criticalTicketsError },
-    { data: todayExpenseRows, error: todayExpensesError },
-    { count: activeVendorsCount, error: activeVendorsError },
+    { data: blockingRows, error: blockingError },
+    { count: resolvedCount, error: resolvedError },
+    { count: totalCount, error: totalError },
+    { data: pendingExpenseRows, error: pendingSpendError },
+    { count: guestImpactCount, error: guestImpactError },
   ] = await Promise.all([
     supabase
       .from('maintenance_tickets')
-      .select('id', { count: 'exact', head: true })
+      .select('id, status, priority, due_at')
       .neq('status', 'resolved')
       .neq('status', 'closed'),
     supabase
       .from('maintenance_tickets')
       .select('id', { count: 'exact', head: true })
-      .eq('priority', 'critical')
-      .neq('status', 'resolved')
-      .neq('status', 'closed'),
-    supabase.from('cash_expenses').select('amount').eq('expense_date', today),
+      .in('status', ['resolved', 'closed']),
+    supabase.from('maintenance_tickets').select('id', { count: 'exact', head: true }),
+    supabase.from('cash_expenses').select('amount').eq('status', 'submitted'),
     supabase
-      .from('vendors')
+      .from('reviews')
       .select('id', { count: 'exact', head: true })
-      .eq('status', 'active'),
+      .lte('rating', 3),
   ])
 
-  if (openTicketsError) {
-    throw new Error(openTicketsError.message)
+  if (blockingError) {
+    throw new Error(blockingError.message)
   }
 
-  if (criticalTicketsError) {
-    throw new Error(criticalTicketsError.message)
+  if (resolvedError) {
+    throw new Error(resolvedError.message)
   }
 
-  if (todayExpensesError) {
-    throw new Error(todayExpensesError.message)
+  if (totalError) {
+    throw new Error(totalError.message)
   }
 
-  if (activeVendorsError) {
-    throw new Error(activeVendorsError.message)
+  if (pendingSpendError) {
+    throw new Error(pendingSpendError.message)
   }
+
+  if (guestImpactError) {
+    throw new Error(guestImpactError.message)
+  }
+
+  const criticalIssues = ((blockingRows as MaintenanceTicketMetricRow[] | null) ?? []).filter(
+    (ticket) => isBlockingTicket(ticket),
+  ).length
+
+  const totalTickets = totalCount ?? 0
+  const resolvedTickets = resolvedCount ?? 0
+  const resolutionRate = totalTickets === 0 ? 100 : (resolvedTickets / totalTickets) * 100
+
+  const pendingSpend = ((pendingExpenseRows as Array<{ amount: number | string | null }> | null) ?? []).reduce(
+    (sum, row) => sum + Number(row.amount ?? 0),
+    0,
+  )
 
   return {
-    openTickets: openTicketsCount ?? 0,
-    criticalTickets: criticalTicketsCount ?? 0,
-    todayExpenses: ((todayExpenseRows as Array<{ amount: number | string | null }> | null) ?? []).reduce(
-      (sum, row) => sum + Number(row.amount ?? 0),
-      0,
-    ),
-    activeVendors: activeVendorsCount ?? 0,
+    criticalIssues,
+    resolutionRate,
+    pendingSpend,
+    guestImpact: guestImpactCount ?? 0,
   }
 }
 
-function getTodaySignals(
+function getCriticalPath(
   maintenanceRows: MaintenanceTicketRow[],
-  expenseRows: ExpenseRow[],
   reviewRows: ReviewRow[],
-  operationRows: OperationRow[],
-) {
-  const maintenanceSignals = maintenanceRows
-    .filter((ticket) => getMaintenanceSeverity(ticket) !== 'normal')
-    .map<TodaySignal>((ticket) => ({
-      id: `maintenance-${ticket.id}`,
-      module: 'maintenance',
-      label: truncateText(ticket.title),
-      statusLabel:
-        getMaintenanceSeverity(ticket) === 'critical' ? 'Critical' : 'Overdue',
-      ctaLabel: 'View',
+): CriticalPathItem[] {
+  const blockingTickets = maintenanceRows
+    .filter((ticket) => isBlockingTicket(ticket))
+    .sort((left, right) => {
+      const leftComplaints = getLinkedComplaintCount(left, reviewRows)
+      const rightComplaints = getLinkedComplaintCount(right, reviewRows)
+
+      if (left.priority !== right.priority) {
+        return left.priority === 'critical' ? -1 : 1
+      }
+
+      if (rightComplaints !== leftComplaints) {
+        return rightComplaints - leftComplaints
+      }
+
+      return new Date(left.reported_at).getTime() - new Date(right.reported_at).getTime()
+    })
+
+  return blockingTickets.slice(0, 3).map((ticket) => {
+    const linkedComplaints = getLinkedComplaintCount(ticket, reviewRows)
+    const contextParts = [ticket.location]
+
+    if (linkedComplaints > 0) {
+      contextParts.push(
+        `${linkedComplaints} linked ${linkedComplaints === 1 ? 'complaint' : 'complaints'}`,
+      )
+    } else if (isOverdueTicket(ticket)) {
+      contextParts.push('Overdue')
+    } else {
+      contextParts.push('Critical issue')
+    }
+
+    return {
+      id: `critical-path-${ticket.id}`,
+      title: truncateText(ticket.title, 68),
+      context: contextParts.join(' · '),
+      actionLabel: 'Open',
       href: buildHref('/app/maintenance', {
         q: ticket.title,
         priority: ticket.priority === 'critical' ? 'critical' : undefined,
       }),
-      severity: getMaintenanceSeverity(ticket),
+      severity: ticket.priority === 'critical' || linkedComplaints > 0 ? 'critical' : 'warning',
+    }
+  })
+}
+
+function getAttentionItems(
+  maintenanceRows: MaintenanceTicketRow[],
+  expenseRows: ExpenseRow[],
+  operationRows: OperationRow[],
+  criticalPath: CriticalPathItem[],
+): AttentionItem[] {
+  const criticalPathIds = new Set(
+    criticalPath.map((item) => item.id.replace('critical-path-', '')),
+  )
+
+  const maintenanceItems = maintenanceRows
+    .filter(
+      (ticket) =>
+        !criticalPathIds.has(ticket.id) &&
+        ticket.status !== 'resolved' &&
+        ticket.status !== 'closed' &&
+        (ticket.priority === 'high' || ticket.status === 'in_progress'),
+    )
+    .map<AttentionItem>((ticket) => ({
+      id: `attention-maintenance-${ticket.id}`,
+      module: 'maintenance',
+      description: truncateText(`${ticket.title} · ${ticket.location}`, 78),
+      actionLabel: 'View',
+      href: buildHref('/app/maintenance', { q: ticket.title }),
+      severity: getMaintenanceSeverity(ticket) === 'normal' ? 'warning' : getMaintenanceSeverity(ticket),
       timestamp: ticket.reported_at,
     }))
 
-  const expenseSignals = expenseRows
-    .filter((expense) => getExpenseSeverity(expense) !== 'normal')
-    .map<TodaySignal>((expense) => ({
-      id: `expense-${expense.id}`,
+  const expenseItems = expenseRows
+    .filter((expense) => expense.status === 'submitted')
+    .map<AttentionItem>((expense) => ({
+      id: `attention-expense-${expense.id}`,
       module: 'expenses',
-      label: truncateText(expense.description),
-      statusLabel:
-        expense.status === 'submitted' ? 'Pending approval' : 'Requires approval',
-      ctaLabel: 'Review',
+      description: truncateText(
+        `${formatCurrency(getExpenseAmount(expense))} · ${expense.description}`,
+        78,
+      ),
+      actionLabel: 'Review',
       href: buildHref('/app/expenses', {
         q: expense.description,
-        status: expense.status === 'submitted' ? 'submitted' : undefined,
-        flagged: isFlaggedExpense(expense) ? 'true' : undefined,
+        status: 'submitted',
       }),
       severity: getExpenseSeverity(expense),
       timestamp: expense.created_at,
     }))
 
-  const reputationSignals = reviewRows
-    .filter((review) => getReviewSeverity(review) !== 'normal')
-    .map<TodaySignal>((review) => ({
-      id: `reputation-${review.id}`,
-      module: 'reputation',
-      label: truncateText(getReviewComment(review)),
-      statusLabel:
-        review.response_status === 'pending' ? 'Needs response' : 'Needs attention',
-      ctaLabel: 'Respond',
-      href: buildHref('/app/reputation', {
-        filter: 'negative',
-        q: getReviewComment(review),
-      }),
-      severity: getReviewSeverity(review),
-      timestamp: review.reviewed_at,
-    }))
-
-  const operationSignals = operationRows
-    .filter((item) => getOperationSeverity(item) !== 'normal')
-    .map<TodaySignal>((item) => ({
-      id: `operations-${item.id}`,
+  const operationItems = operationRows
+    .filter(
+      (item) =>
+        item.status !== 'done' &&
+        (item.priority === 'high' || item.status === 'open'),
+    )
+    .map<AttentionItem>((item) => ({
+      id: `attention-operations-${item.id}`,
       module: 'operations',
-      label: truncateText(item.title),
-      statusLabel: operationStatusLabels[item.status],
-      ctaLabel: 'Open',
+      description: truncateText(item.title, 78),
+      actionLabel: 'Open',
       href: buildHref('/app/operations', {
         q: item.title,
         type: item.type,
         priority: item.priority,
-        status: item.status,
       }),
       severity: getOperationSeverity(item),
       timestamp: item.created_at,
     }))
 
-  return sortSignals([
-    ...maintenanceSignals,
-    ...expenseSignals,
-    ...reputationSignals,
-    ...operationSignals,
+  return sortBySeverityAndTime([
+    ...maintenanceItems,
+    ...expenseItems,
+    ...operationItems,
   ]).slice(0, 5)
-}
-
-function getQueueBlocks(
-  maintenanceRows: MaintenanceTicketRow[],
-  expenseRows: ExpenseRow[],
-  operationRows: OperationRow[],
-): QueueBlockData[] {
-  const maintenanceQueue = sortMaintenanceRows(
-    maintenanceRows.filter(
-      (ticket) => ticket.status !== 'resolved' && ticket.status !== 'closed',
-    ),
-  )
-
-  const expenseQueue = sortExpenseRows(
-    expenseRows.filter(
-      (expense) => expense.status === 'submitted' || isFlaggedExpense(expense),
-    ),
-  )
-
-  const operationsQueue = sortOperationRows(
-    operationRows.filter((item) => item.status !== 'done'),
-  )
-
-  return [
-    {
-      module: 'maintenance',
-      count: maintenanceQueue.length,
-      href: '/app/maintenance',
-      items: maintenanceQueue.slice(0, 3).map((ticket) => ({
-        id: ticket.id,
-        label: truncateText(ticket.title, 64),
-        meta: ticket.location,
-        statusLabel: maintenanceStatusLabels[ticket.status],
-        severity: getMaintenanceSeverity(ticket),
-        href: buildHref('/app/maintenance', { q: ticket.title }),
-      })),
-    },
-    {
-      module: 'expenses',
-      count: expenseQueue.length,
-      href: '/app/expenses',
-      items: expenseQueue.slice(0, 3).map((expense) => ({
-        id: expense.id,
-        label: truncateText(expense.description, 64),
-        meta: expense.status === 'submitted' ? 'Pending approval' : 'Requires approval',
-        statusLabel: expense.status.replace(/_/g, ' '),
-        severity: getExpenseSeverity(expense),
-        href: buildHref('/app/expenses', {
-          q: expense.description,
-          status: expense.status === 'submitted' ? 'submitted' : undefined,
-          flagged: isFlaggedExpense(expense) ? 'true' : undefined,
-        }),
-      })),
-    },
-    {
-      module: 'operations',
-      count: operationsQueue.length,
-      href: '/app/operations',
-      items: operationsQueue.slice(0, 3).map((item) => ({
-        id: item.id,
-        label: truncateText(item.title, 64),
-        meta: item.location ?? moduleLabels.operations,
-        statusLabel: operationStatusLabels[item.status],
-        severity: getOperationSeverity(item),
-        href: buildHref('/app/operations', {
-          q: item.title,
-          type: item.type,
-          priority: item.priority,
-        }),
-      })),
-    },
-  ]
 }
 
 function getRecentActivity(
@@ -583,49 +550,58 @@ function getRecentActivity(
   expenseRows: ExpenseRow[],
   reviewRows: ReviewRow[],
   operationRows: OperationRow[],
+  excludedIds: Set<string>,
 ) {
-  const maintenanceActivity = maintenanceRows.map<ActivityItem>((ticket) => ({
-    id: `maintenance-${ticket.id}`,
-    module: 'maintenance',
-    label: truncateText(ticket.title),
-    timestamp: ticket.reported_at,
-    href: buildHref('/app/maintenance', { q: ticket.title }),
-    severity: getMaintenanceSeverity(ticket),
-  }))
+  const maintenanceActivity = maintenanceRows
+    .filter((ticket) => !excludedIds.has(`maintenance-${ticket.id}`))
+    .map<ActivityItem>((ticket) => ({
+      id: `maintenance-${ticket.id}`,
+      module: 'maintenance',
+      label: truncateText(ticket.title, 72),
+      timestamp: ticket.reported_at,
+      href: buildHref('/app/maintenance', { q: ticket.title }),
+      severity: getMaintenanceSeverity(ticket),
+    }))
 
-  const expenseActivity = expenseRows.map<ActivityItem>((expense) => ({
-    id: `expenses-${expense.id}`,
-    module: 'expenses',
-    label: truncateText(expense.description),
-    timestamp: expense.created_at,
-    href: buildHref('/app/expenses', { q: expense.description }),
-    severity: getExpenseSeverity(expense),
-  }))
+  const expenseActivity = expenseRows
+    .filter((expense) => !excludedIds.has(`expenses-${expense.id}`))
+    .map<ActivityItem>((expense) => ({
+      id: `expenses-${expense.id}`,
+      module: 'expenses',
+      label: truncateText(expense.description, 72),
+      timestamp: expense.created_at,
+      href: buildHref('/app/expenses', { q: expense.description }),
+      severity: getExpenseSeverity(expense),
+    }))
 
-  const reputationActivity = reviewRows.map<ActivityItem>((review) => ({
-    id: `reputation-${review.id}`,
-    module: 'reputation',
-    label: truncateText(getReviewComment(review)),
-    timestamp: review.reviewed_at,
-    href: buildHref('/app/reputation', { q: getReviewComment(review) }),
-    severity: getReviewSeverity(review),
-  }))
+  const reviewActivity = reviewRows
+    .filter((review) => !excludedIds.has(`reputation-${review.id}`))
+    .map<ActivityItem>((review) => ({
+      id: `reputation-${review.id}`,
+      module: 'reputation',
+      label: truncateText(getReviewComment(review), 72),
+      timestamp: review.reviewed_at,
+      href: buildHref('/app/reputation', { q: getReviewComment(review) }),
+      severity: getReviewSeverity(review),
+    }))
 
-  const operationsActivity = operationRows.map<ActivityItem>((item) => ({
-    id: `operations-${item.id}`,
-    module: 'operations',
-    label: truncateText(item.title),
-    timestamp: item.created_at,
-    href: buildHref('/app/operations', { q: item.title }),
-    severity: getOperationSeverity(item),
-  }))
+  const operationsActivity = operationRows
+    .filter((item) => !excludedIds.has(`operations-${item.id}`))
+    .map<ActivityItem>((item) => ({
+      id: `operations-${item.id}`,
+      module: 'operations',
+      label: truncateText(item.title, 72),
+      timestamp: item.created_at,
+      href: buildHref('/app/operations', { q: item.title }),
+      severity: getOperationSeverity(item),
+    }))
 
   return sortRecentActivity([
     ...maintenanceActivity,
     ...expenseActivity,
-    ...reputationActivity,
+    ...reviewActivity,
     ...operationsActivity,
-  ]).slice(0, 8)
+  ]).slice(0, 6)
 }
 
 async function getDashboardData(): Promise<DashboardData> {
@@ -643,22 +619,22 @@ async function getDashboardData(): Promise<DashboardData> {
       .from('maintenance_tickets')
       .select('id, title, location, status, priority, reported_at, due_at')
       .order('reported_at', { ascending: false })
-      .limit(12),
+      .limit(18),
     supabase
       .from('cash_expenses')
       .select('id, description, amount, status, created_at')
       .order('created_at', { ascending: false })
-      .limit(12),
+      .limit(18),
     supabase
       .from('reviews')
       .select('id, title, body, rating, reviewed_at, response_status')
       .order('reviewed_at', { ascending: false })
-      .limit(12),
+      .limit(18),
     supabase
       .from('operation_items')
       .select('id, type, title, status, priority, created_at, location, notes')
       .order('created_at', { ascending: false })
-      .limit(12),
+      .limit(18),
   ])
 
   if (maintenanceError) {
@@ -682,153 +658,40 @@ async function getDashboardData(): Promise<DashboardData> {
   const nextReviewRows = (reviewRows as ReviewRow[] | null) ?? []
   const nextOperationRows = (operationRows as OperationRow[] | null) ?? []
 
+  const criticalPath = getCriticalPath(nextMaintenanceRows, nextReviewRows)
+  const attentionItems = getAttentionItems(
+    nextMaintenanceRows,
+    nextExpenseRows,
+    nextOperationRows,
+    criticalPath,
+  )
+
+  const excludedIds = new Set<string>([
+    ...criticalPath.map((item) => `maintenance-${item.id.replace('critical-path-', '')}`),
+    ...attentionItems.map((item) => {
+      if (item.module === 'maintenance') {
+        return item.id.replace('attention-', '')
+      }
+
+      if (item.module === 'expenses') {
+        return item.id.replace('attention-', '')
+      }
+
+      return item.id.replace('attention-', '')
+    }),
+  ])
+
   return {
-    todaySignals: getTodaySignals(
-      nextMaintenanceRows,
-      nextExpenseRows,
-      nextReviewRows,
-      nextOperationRows,
-    ),
-    queueBlocks: getQueueBlocks(
-      nextMaintenanceRows,
-      nextExpenseRows,
-      nextOperationRows,
-    ),
+    criticalPath,
+    attentionItems,
     recentActivity: getRecentActivity(
       nextMaintenanceRows,
       nextExpenseRows,
       nextReviewRows,
       nextOperationRows,
+      excludedIds,
     ),
   }
-}
-
-interface TodaySignalRowProps {
-  signal: TodaySignal
-}
-
-function TodaySignalRow({ signal }: TodaySignalRowProps) {
-  return (
-    <Link
-      to={signal.href}
-      className="group grid gap-3 rounded-2xl border border-slate-100 px-4 py-3 transition-colors hover:bg-slate-50/80 md:grid-cols-[auto_minmax(0,1fr)_auto_auto] md:items-center"
-    >
-      <span className="inline-flex rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.2em] text-slate-600">
-        {moduleLabels[signal.module]}
-      </span>
-      <div className="min-w-0">
-        <p className="truncate text-sm font-medium text-slate-900">{signal.label}</p>
-        <p className="text-[11px] uppercase tracking-[0.24em] text-slate-400">
-          {formatTimestamp(signal.timestamp)}
-        </p>
-      </div>
-      <span
-        className={[
-          'inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.2em]',
-          getToneClasses(signal.severity),
-        ].join(' ')}
-      >
-        {signal.statusLabel}
-      </span>
-      <span className="text-sm text-slate-600 transition-colors group-hover:text-slate-950">
-        {signal.ctaLabel}
-      </span>
-    </Link>
-  )
-}
-
-interface QueueBlockProps {
-  block: QueueBlockData
-}
-
-function QueueBlock({ block }: QueueBlockProps) {
-  return (
-    <SurfaceCard
-      title={moduleLabels[block.module]}
-      description={`${block.count} active ${block.count === 1 ? 'item' : 'items'}`}
-      className="h-full"
-    >
-      <div className="space-y-3">
-        {block.items.length > 0 ? (
-          <div className="space-y-2">
-            {block.items.map((item) => (
-              <Link
-                key={item.id}
-                to={item.href}
-                className="group flex items-start justify-between gap-3 rounded-2xl border border-slate-100 px-4 py-3 transition-colors hover:bg-slate-50/80"
-              >
-                <div className="min-w-0 space-y-1">
-                  <p className="truncate text-sm font-medium text-slate-900">
-                    {item.label}
-                  </p>
-                  <p className="truncate text-[11px] uppercase tracking-[0.24em] text-slate-400">
-                    {item.meta}
-                  </p>
-                </div>
-                <div className="flex shrink-0 flex-col items-end gap-1">
-                  <span
-                    className={[
-                      'inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.2em]',
-                      getToneClasses(item.severity),
-                    ].join(' ')}
-                  >
-                    {item.statusLabel}
-                  </span>
-                </div>
-              </Link>
-            ))}
-          </div>
-        ) : (
-          <Link
-            to={block.href}
-            className="block rounded-2xl border border-dashed border-slate-200 px-4 py-3 text-sm text-slate-600 transition-colors hover:bg-slate-50/80"
-          >
-            No active items. Open {moduleLabels[block.module]}.
-          </Link>
-        )}
-
-        <Link
-          to={block.href}
-          className="inline-flex items-center text-sm font-semibold text-slate-700 transition-colors hover:text-slate-950"
-        >
-          Open full list
-        </Link>
-      </div>
-    </SurfaceCard>
-  )
-}
-
-interface ActivityRowProps {
-  item: ActivityItem
-}
-
-function ActivityRow({ item }: ActivityRowProps) {
-  return (
-    <Link
-      to={item.href}
-      className="group grid gap-2 rounded-2xl border border-slate-100 px-4 py-3 transition-colors hover:bg-slate-50/80 md:grid-cols-[auto_minmax(0,1fr)_auto] md:items-center"
-    >
-      <div className="flex items-center gap-2">
-        <span className="inline-flex rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.2em] text-slate-600">
-          {moduleLabels[item.module]}
-        </span>
-        <span
-          className={[
-            'inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.2em]',
-            getToneClasses(item.severity),
-          ].join(' ')}
-        >
-          {item.severity}
-        </span>
-      </div>
-
-      <p className="truncate text-sm font-medium text-slate-900">{item.label}</p>
-
-      <span className="text-[11px] uppercase tracking-[0.24em] text-slate-400 transition-colors group-hover:text-slate-700">
-        {formatTimestamp(item.timestamp)}
-      </span>
-    </Link>
-  )
 }
 
 interface KpiCardProps {
@@ -842,32 +705,109 @@ function KpiCard({ label, value, helper, href }: KpiCardProps) {
   return (
     <Link
       to={href}
-      className="rounded-3xl border border-white/70 bg-white/80 p-5 shadow-shell backdrop-blur transition-colors hover:bg-slate-50/80"
+      className="rounded-3xl border border-white/70 bg-white/80 p-3.5 shadow-shell backdrop-blur transition-colors hover:bg-slate-50/80"
     >
-      <div className="space-y-1.5">
-        <p className="text-3xl font-semibold tracking-tight text-slate-950">
-          {value}
-        </p>
-        <div className="space-y-1">
-          <p className="text-sm text-slate-600">{label}</p>
-          <p className="text-[11px] uppercase tracking-[0.24em] text-slate-400">
-            {helper}
+      <div className="space-y-2">
+        <div className="flex items-end justify-between gap-3">
+          <p className="text-3xl font-semibold tracking-tight text-slate-950">
+            {value}
           </p>
+          <p className="text-[11px] uppercase tracking-[0.24em] text-slate-400">
+            {label}
+          </p>
+        </div>
+        <div>
+          <p className="text-sm text-slate-600">{helper}</p>
         </div>
       </div>
     </Link>
   )
 }
 
+interface CriticalPathRowProps {
+  item: CriticalPathItem
+}
+
+function CriticalPathRow({ item }: CriticalPathRowProps) {
+  return (
+    <Link
+      to={item.href}
+      className="group grid gap-2 rounded-2xl border border-slate-100 px-3 py-2 transition-colors hover:bg-slate-50/80 md:grid-cols-[minmax(0,1fr)_auto_auto] md:items-center"
+    >
+      <div className="min-w-0">
+        <p className="truncate text-sm font-medium text-slate-900">{item.title}</p>
+        <p className="truncate text-[11px] uppercase tracking-[0.24em] text-slate-400">
+          {item.context}
+        </p>
+      </div>
+      <span
+        className={[
+          'inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.2em]',
+          getToneClasses(item.severity),
+        ].join(' ')}
+      >
+        {getSeverityLabel(item.severity)}
+      </span>
+      <span className="text-[11px] uppercase tracking-[0.24em] text-slate-500 transition-colors group-hover:text-slate-950">
+        {item.actionLabel}
+      </span>
+    </Link>
+  )
+}
+
+interface AttentionRowProps {
+  item: AttentionItem
+}
+
+function AttentionRow({ item }: AttentionRowProps) {
+  return (
+    <Link
+      to={item.href}
+      className="group grid gap-2 rounded-2xl border border-slate-100 px-3 py-2 transition-colors hover:bg-slate-50/80 md:grid-cols-[auto_minmax(0,1fr)_auto] md:items-center"
+    >
+      <span className="inline-flex rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.2em] text-slate-600">
+        {moduleLabels[item.module]}
+      </span>
+      <div className="min-w-0">
+        <p className="truncate text-sm font-medium text-slate-900">{item.description}</p>
+      </div>
+      <span className="text-[11px] uppercase tracking-[0.24em] text-slate-500 transition-colors group-hover:text-slate-950">
+        {item.actionLabel}
+      </span>
+    </Link>
+  )
+}
+
+interface ActivityRowProps {
+  item: ActivityItem
+}
+
+function ActivityRow({ item }: ActivityRowProps) {
+  return (
+    <Link
+      to={item.href}
+      className="group grid gap-2 rounded-2xl border border-slate-100 px-3 py-2 transition-colors hover:bg-slate-50/80 md:grid-cols-[auto_minmax(0,1fr)_auto] md:items-center"
+    >
+      <span className="inline-flex rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.2em] text-slate-600">
+        {moduleLabels[item.module]}
+      </span>
+      <p className="truncate text-sm font-medium text-slate-900">{item.label}</p>
+      <span className="text-[11px] uppercase tracking-[0.24em] text-slate-400 transition-colors group-hover:text-slate-700">
+        {formatTimestamp(item.timestamp)}
+      </span>
+    </Link>
+  )
+}
+
 export function Dashboard() {
-  const [kpis, setKpis] = useState<DashboardKpis>({
-    openTickets: 0,
-    criticalTickets: 0,
-    todayExpenses: 0,
-    activeVendors: 0,
+  const [kpis, setKpis] = useState<DirectorKpis>({
+    criticalIssues: 0,
+    resolutionRate: 0,
+    pendingSpend: 0,
+    guestImpact: 0,
   })
-  const [todaySignals, setTodaySignals] = useState<TodaySignal[]>([])
-  const [queueBlocks, setQueueBlocks] = useState<QueueBlockData[]>([])
+  const [criticalPath, setCriticalPath] = useState<CriticalPathItem[]>([])
+  const [attentionItems, setAttentionItems] = useState<AttentionItem[]>([])
   const [recentActivity, setRecentActivity] = useState<ActivityItem[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
@@ -914,15 +854,17 @@ export function Dashboard() {
 
         if (!isCancelled) {
           setKpis(nextKpis)
-          setTodaySignals(data.todaySignals)
-          setQueueBlocks(data.queueBlocks)
+          setCriticalPath(data.criticalPath)
+          setAttentionItems(data.attentionItems)
           setRecentActivity(data.recentActivity)
         }
       } catch (error) {
         console.error('Unable to load dashboard data', error)
 
         if (!isCancelled) {
-          setErrorMessage('Open the relevant module to continue working while the dashboard reconnects.')
+          setErrorMessage(
+            'Open the relevant module to continue working while the dashboard reconnects.',
+          )
         }
       } finally {
         if (!isCancelled) {
@@ -940,28 +882,28 @@ export function Dashboard() {
 
   const kpiCards = [
     {
-      label: 'Open tickets',
-      value: String(kpis.openTickets),
-      helper: 'Open maintenance queue',
-      href: '/app/maintenance',
-    },
-    {
-      label: 'Critical tickets',
-      value: String(kpis.criticalTickets),
-      helper: 'Immediate maintenance issues',
+      label: 'Critical Issues',
+      value: String(kpis.criticalIssues),
+      helper: 'Blocking rooms and access',
       href: buildHref('/app/maintenance', { priority: 'critical' }),
     },
     {
-      label: 'Today spend',
-      value: formatCurrency(kpis.todayExpenses),
-      helper: 'Open expense control',
-      href: '/app/expenses',
+      label: 'Resolution Rate',
+      value: formatPercentage(kpis.resolutionRate),
+      helper: 'Resolved + closed tickets',
+      href: '/app/maintenance',
     },
     {
-      label: 'Active vendors',
-      value: String(kpis.activeVendors),
-      helper: 'Open vendor directory',
-      href: '/app/vendors',
+      label: 'Pending Spend',
+      value: formatCurrency(kpis.pendingSpend),
+      helper: 'Awaiting approval',
+      href: buildHref('/app/expenses', { status: 'submitted' }),
+    },
+    {
+      label: 'Guest Impact',
+      value: String(kpis.guestImpact),
+      helper: 'Negative reviews to follow up',
+      href: buildHref('/app/reputation', { filter: 'negative' }),
     },
   ]
 
@@ -970,7 +912,7 @@ export function Dashboard() {
       title={`Good morning, ${userLabel}`}
       description="Here’s what needs your attention today."
     >
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-2.5 md:grid-cols-2 xl:grid-cols-4">
         {kpiCards.map((card) => (
           <KpiCard
             key={card.label}
@@ -982,83 +924,104 @@ export function Dashboard() {
         ))}
       </div>
 
-      <SurfaceCard
-        title="Requires attention"
-        description="Top operational items to review right now across maintenance, expenses, reputation, and operations."
-      >
-        {isLoading ? (
-          <p className="text-sm leading-7 text-slate-600">Loading today’s signals...</p>
-        ) : errorMessage ? (
+      {errorMessage ? (
+        <SurfaceCard
+          title="Dashboard unavailable"
+          description={errorMessage}
+        >
+          <div className="grid gap-2 md:grid-cols-3">
+            <Link
+              to="/app/maintenance"
+              className="rounded-2xl border border-slate-100 px-3.5 py-2.5 text-sm font-medium text-slate-900 transition-colors hover:bg-slate-50/80"
+            >
+              Open Maintenance
+            </Link>
+            <Link
+              to="/app/expenses"
+              className="rounded-2xl border border-slate-100 px-3.5 py-2.5 text-sm font-medium text-slate-900 transition-colors hover:bg-slate-50/80"
+            >
+              Open Expenses
+            </Link>
+            <Link
+              to="/app/operations"
+              className="rounded-2xl border border-slate-100 px-3.5 py-2.5 text-sm font-medium text-slate-900 transition-colors hover:bg-slate-50/80"
+            >
+              Open Operations
+            </Link>
+          </div>
+        </SurfaceCard>
+      ) : (
+        <div className="grid gap-3 xl:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)]">
           <div className="space-y-3">
-            <p className="text-sm leading-7 text-slate-600">{errorMessage}</p>
-            <div className="flex flex-wrap gap-3">
-              <Link
-                to="/app/maintenance"
-                className="text-sm font-semibold text-slate-700 transition-colors hover:text-slate-950"
-              >
-                Open Maintenance
-              </Link>
-              <Link
-                to="/app/expenses"
-                className="text-sm font-semibold text-slate-700 transition-colors hover:text-slate-950"
-              >
-                Open Expenses
-              </Link>
+            <SurfaceCard
+              title="Critical path"
+              description="Blocking issues with the clearest operational impact."
+            >
+              {isLoading ? (
+                <p className="text-sm text-slate-600">Loading blocking issues...</p>
+              ) : criticalPath.length > 0 ? (
+                <div className="space-y-2">
+                  {criticalPath.map((item) => (
+                    <CriticalPathRow key={item.id} item={item} />
+                  ))}
+                </div>
+              ) : (
+                <Link
+                  to="/app/maintenance"
+                  className="block rounded-2xl border border-dashed border-slate-200 px-3.5 py-2.5 text-sm text-slate-600 transition-colors hover:bg-slate-50/80"
+                >
+                  No blocking issues right now. Open Maintenance.
+                </Link>
+              )}
+            </SurfaceCard>
+
+            <SurfaceCard
+              title="Requires attention"
+              description="Unified list across maintenance, spend, and execution."
+            >
+              {isLoading ? (
+                <p className="text-sm text-slate-600">Loading priorities...</p>
+              ) : attentionItems.length > 0 ? (
+                <div className="space-y-2">
+                  {attentionItems.map((item) => (
+                    <AttentionRow key={item.id} item={item} />
+                  ))}
+                </div>
+              ) : (
+                <Link
+                  to="/app/operations"
+                  className="block rounded-2xl border border-dashed border-slate-200 px-3.5 py-2.5 text-sm text-slate-600 transition-colors hover:bg-slate-50/80"
+                >
+                  No additional actions queued. Open Operations.
+                </Link>
+              )}
+            </SurfaceCard>
+          </div>
+
+          <SurfaceCard
+            title="Recent activity"
+            description="Latest movement across incidents, spend, feedback, and execution."
+            className="h-full"
+          >
+            {isLoading ? (
+              <p className="text-sm text-slate-600">Loading recent activity...</p>
+            ) : recentActivity.length > 0 ? (
+              <div className="space-y-2">
+                {recentActivity.map((item) => (
+                  <ActivityRow key={item.id} item={item} />
+                ))}
+              </div>
+            ) : (
               <Link
                 to="/app/operations"
-                className="text-sm font-semibold text-slate-700 transition-colors hover:text-slate-950"
+                className="block rounded-2xl border border-dashed border-slate-200 px-3.5 py-2.5 text-sm text-slate-600 transition-colors hover:bg-slate-50/80"
               >
-                Open Operations
+                No recent activity yet. Open Operations to start logging work.
               </Link>
-            </div>
-          </div>
-        ) : todaySignals.length > 0 ? (
-          <div className="space-y-2">
-            {todaySignals.map((signal) => (
-              <TodaySignalRow key={signal.id} signal={signal} />
-            ))}
-          </div>
-        ) : (
-          <Link
-            to="/app/operations"
-            className="block rounded-2xl border border-dashed border-slate-200 px-4 py-3 text-sm text-slate-600 transition-colors hover:bg-slate-50/80"
-          >
-            No urgent items right now. Open Operations to review the full workspace.
-          </Link>
-        )}
-      </SurfaceCard>
-
-      <div className="grid gap-4 xl:grid-cols-3">
-        {queueBlocks.map((block) => (
-          <QueueBlock key={block.module} block={block} />
-        ))}
-      </div>
-
-      <SurfaceCard
-        title="Recent activity"
-        description="Latest updates across the control layer, ordered by recency."
-      >
-        {isLoading ? (
-          <p className="text-sm leading-7 text-slate-600">Loading recent activity...</p>
-        ) : errorMessage ? (
-          <p className="text-sm leading-7 text-slate-600">
-            Open a module to continue reviewing live work.
-          </p>
-        ) : recentActivity.length > 0 ? (
-          <div className="space-y-2">
-            {recentActivity.map((item) => (
-              <ActivityRow key={item.id} item={item} />
-            ))}
-          </div>
-        ) : (
-          <Link
-            to="/app/operations"
-            className="block rounded-2xl border border-dashed border-slate-200 px-4 py-3 text-sm text-slate-600 transition-colors hover:bg-slate-50/80"
-          >
-            No recent activity yet. Open Operations to start logging work.
-          </Link>
-        )}
-      </SurfaceCard>
+            )}
+          </SurfaceCard>
+        </div>
+      )}
     </PageSection>
   )
 }
