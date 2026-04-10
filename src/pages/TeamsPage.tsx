@@ -12,7 +12,7 @@ import { SurfaceCard } from '../components/ui/SurfaceCard'
 import { isSupabaseConfigured, supabase } from '../lib/supabase'
 
 type PriorityLevel = 'low' | 'medium' | 'high' | 'critical'
-type OperationItemStatus = 'open' | 'in_progress' | 'done'
+type OperationItemStatus = 'open' | 'in_progress' | 'blocked' | 'done'
 type OperationItemType = 'ticket' | 'task' | 'intervention' | 'order'
 type TeamLoadTone = 'low' | 'medium' | 'high'
 
@@ -60,6 +60,7 @@ interface TeamCard {
   staffCount: number
   openItemsCount: number
   inProgressItemsCount: number
+  blockedItemsCount: number
   totalLoad: number
   loadTone: TeamLoadTone
 }
@@ -92,6 +93,7 @@ const typeLabels: Record<OperationItemType, string> = {
 const statusLabels: Record<OperationItemStatus, string> = {
   open: 'Open',
   in_progress: 'In progress',
+  blocked: 'Blocked',
   done: 'Done',
 }
 
@@ -115,8 +117,9 @@ const loadClasses: Record<TeamLoadTone, string> = {
 }
 
 const statusClasses: Record<OperationItemStatus, string> = {
-  open: 'bg-slate-900 text-white',
-  in_progress: 'bg-slate-100 text-slate-700',
+  open: 'bg-slate-100 text-slate-700',
+  in_progress: 'bg-amber-50 text-amber-700',
+  blocked: 'bg-red-50 text-red-700',
   done: 'bg-emerald-50 text-emerald-700',
 }
 
@@ -197,12 +200,15 @@ function normalizeText(value: string) {
     .toLowerCase()
 }
 
-function pluralize(count: number, singular: string) {
-  return `${count} ${count === 1 ? singular : `${singular}s`}`
+function pluralize(count: number, singular: string, plural = `${singular}s`) {
+  return `${count} ${count === 1 ? singular : plural}`
 }
 
-function getLoadTone(totalLoad: number): TeamLoadTone {
-  if (totalLoad >= 6) {
+function getLoadTone(
+  totalLoad: number,
+  blockedItemsCount: number,
+): TeamLoadTone {
+  if (blockedItemsCount > 0 || totalLoad >= 6) {
     return 'high'
   }
 
@@ -226,6 +232,30 @@ function formatCreatedAt(value: string) {
     hour: '2-digit',
     minute: '2-digit',
   }).format(date)
+}
+
+function getTeamHandoff({
+  blockedItemsCount,
+  inProgressItemsCount,
+  openItemsCount,
+}: {
+  blockedItemsCount: number
+  inProgressItemsCount: number
+  openItemsCount: number
+}) {
+  if (blockedItemsCount > 0) {
+    return `${pluralize(blockedItemsCount, 'blocked item')} waiting on an external dependency or decision.`
+  }
+
+  if (inProgressItemsCount > 0) {
+    return `${pluralize(inProgressItemsCount, 'item')} moving through live coordination.`
+  }
+
+  if (openItemsCount > 0) {
+    return `${pluralize(openItemsCount, 'open item')} waiting for allocation or confirmation.`
+  }
+
+  return 'No active operations — system stable.'
 }
 
 function getOperationTeamId(item: OperationItemRow, teams: TeamRow[]) {
@@ -300,7 +330,7 @@ export function TeamsPage() {
           supabase
             .from('operation_items')
             .select('id, type, title, status, priority, location, notes, created_at')
-            .in('status', ['open', 'in_progress'])
+            .in('status', ['open', 'in_progress', 'blocked'])
             .order('created_at', { ascending: false }),
           supabase
             .from('maintenance_tickets')
@@ -324,7 +354,12 @@ export function TeamsPage() {
         const teamMetrics = new Map(
           nextTeams.map((team) => [
             team.id,
-            { staffCount: 0, openItemsCount: 0, inProgressItemsCount: 0 },
+            {
+              staffCount: 0,
+              openItemsCount: 0,
+              inProgressItemsCount: 0,
+              blockedItemsCount: 0,
+            },
           ]),
         )
         const roleCounts = new Map<string, number>()
@@ -363,8 +398,10 @@ export function TeamsPage() {
 
           if (item.status === 'open') {
             teamMetrics.get(teamId)!.openItemsCount += 1
-          } else {
+          } else if (item.status === 'in_progress') {
             teamMetrics.get(teamId)!.inProgressItemsCount += 1
+          } else if (item.status === 'blocked') {
+            teamMetrics.get(teamId)!.blockedItemsCount += 1
           }
         }
 
@@ -374,9 +411,12 @@ export function TeamsPage() {
               staffCount: 0,
               openItemsCount: 0,
               inProgressItemsCount: 0,
+              blockedItemsCount: 0,
             }
             const totalLoad =
-              metrics.openItemsCount + metrics.inProgressItemsCount
+              metrics.openItemsCount +
+              metrics.inProgressItemsCount +
+              metrics.blockedItemsCount
 
             return {
               id: team.id,
@@ -385,17 +425,13 @@ export function TeamsPage() {
               focus:
                 team.description ??
                 'Operational ownership is defined here and ready for live execution.',
-              handoff:
-                metrics.inProgressItemsCount > 0
-                  ? `${pluralize(metrics.inProgressItemsCount, 'item')} moving through live coordination.`
-                  : metrics.openItemsCount > 0
-                    ? `${pluralize(metrics.openItemsCount, 'open item')} waiting for allocation or confirmation.`
-                    : 'Execution is stable with no active coordination pressure.',
+              handoff: getTeamHandoff(metrics),
               staffCount: metrics.staffCount,
               openItemsCount: metrics.openItemsCount,
               inProgressItemsCount: metrics.inProgressItemsCount,
+              blockedItemsCount: metrics.blockedItemsCount,
               totalLoad,
-              loadTone: getLoadTone(totalLoad),
+              loadTone: getLoadTone(totalLoad, metrics.blockedItemsCount),
             }
           }),
         )
@@ -511,31 +547,35 @@ export function TeamsPage() {
                         {team.name}
                       </h3>
                       <p className="text-sm text-slate-500">
-                        {[team.code, pluralize(team.staffCount, 'staff'), pluralize(team.totalLoad, 'active item')]
+                        {[
+                          team.code,
+                          pluralize(team.staffCount, 'staff', 'staff'),
+                          pluralize(team.totalLoad, 'active item'),
+                        ]
                           .filter(Boolean)
                           .join(' • ')}
                       </p>
                     </div>
-                    <span
-                      className={[
-                        'inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-medium ring-1',
-                        loadClasses[team.loadTone],
-                      ].join(' ')}
-                    >
-                      <span>●</span>
-                      <span>{loadLabels[team.loadTone]}</span>
-                    </span>
+                    <div className="flex flex-wrap items-center gap-2">
+                      {team.blockedItemsCount > 0 ? (
+                        <span className="inline-flex items-center gap-1.5 rounded-full bg-red-50 px-2 py-0.5 text-[11px] font-medium text-red-700 ring-1 ring-red-100">
+                          <span>●</span>
+                          <span>{pluralize(team.blockedItemsCount, 'blocked item')}</span>
+                        </span>
+                      ) : null}
+                      <span
+                        className={[
+                          'inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-medium ring-1',
+                          loadClasses[team.loadTone],
+                        ].join(' ')}
+                      >
+                        <span>●</span>
+                        <span>{loadLabels[team.loadTone]}</span>
+                      </span>
+                    </div>
                   </div>
 
                   <div className="mt-4 grid gap-3 md:grid-cols-3">
-                    <div className="rounded-2xl bg-white px-3 py-3">
-                      <p className="text-[11px] uppercase tracking-[0.18em] text-slate-400">
-                        Staff
-                      </p>
-                      <p className="mt-1 text-sm font-semibold text-slate-900">
-                        {pluralize(team.staffCount, 'member')}
-                      </p>
-                    </div>
                     <div className="rounded-2xl bg-white px-3 py-3">
                       <p className="text-[11px] uppercase tracking-[0.18em] text-slate-400">
                         Open items
@@ -550,6 +590,21 @@ export function TeamsPage() {
                       </p>
                       <p className="mt-1 text-sm font-semibold text-slate-900">
                         {team.inProgressItemsCount}
+                      </p>
+                    </div>
+                    <div className="rounded-2xl bg-white px-3 py-3">
+                      <p className="text-[11px] uppercase tracking-[0.18em] text-slate-400">
+                        Blocked
+                      </p>
+                      <p
+                        className={[
+                          'mt-1 text-sm font-semibold',
+                          team.blockedItemsCount > 0
+                            ? 'text-red-600'
+                            : 'text-slate-900',
+                        ].join(' ')}
+                      >
+                        {team.blockedItemsCount}
                       </p>
                     </div>
                   </div>
@@ -619,7 +674,7 @@ export function TeamsPage() {
                     </div>
                     <div className="flex items-center gap-3">
                       <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600">
-                        {pluralize(role.assignedCount, 'assigned')}
+                        {pluralize(role.assignedCount, 'assigned', 'assigned')}
                       </span>
                       <ArrowRight className="mt-0.5 h-4 w-4 text-slate-300" />
                     </div>
@@ -715,8 +770,7 @@ export function TeamsPage() {
         ) : (
           <div className="rounded-3xl border border-slate-200 bg-slate-50/70 p-5">
             <p className="text-sm leading-6 text-slate-500">
-              Coordination will become visible here as soon as live operation
-              items start moving across the workspace.
+              No active operations — system stable.
             </p>
           </div>
         )}
