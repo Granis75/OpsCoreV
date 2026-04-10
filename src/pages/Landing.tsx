@@ -1,30 +1,108 @@
+import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { SurfaceCard } from '../components/ui/SurfaceCard'
 
-const benefits = [
+const heroCards = [
   {
-    title: 'Detect issues earlier',
+    label: 'Capture',
+    title: 'Turn daily noise into a readable operating baseline.',
     description:
-      'Bring maintenance, spend, vendors, and guest feedback into one readable system.',
+      'Maintenance, spend, vendors and guest issues stay visible in one system instead of drifting across inboxes and spreadsheets.',
   },
   {
-    title: 'Centralize operational signals',
+    label: 'Coordination',
+    title: 'Keep ownership clear while work is still moving.',
     description:
-      'Keep today’s incidents, approvals, and guest concerns in one shared workspace.',
+      'The workspace keeps open loops, dependencies and follow-ups visible before they become escalation threads.',
   },
   {
-    title: 'Improve decision-making',
+    label: 'Visibility',
+    title: 'See operational pressure without adding reporting work.',
     description:
-      'Help teams act on real signals instead of switching between fragmented tools.',
+      'Teams get a clean read on workload, risks and response timing without building another layer of manual updates.',
   },
 ]
 
+const supportingCards = [
+  {
+    label: 'Workspace',
+    title: 'A control surface designed for daily execution.',
+    description:
+      'Open work, review cycles and guest-impacting signals stay close enough to act on in minutes.',
+  },
+  {
+    label: 'System',
+    title: 'Structured operations replace scattered follow-up.',
+    description:
+      'The product is shaped around clarity, ownership and repeatable routines rather than extra process.',
+  },
+]
+
+const signals = [
+  {
+    category: 'Maintenance',
+    message: 'One room recovery ticket is overdue and still waiting on engineering confirmation.',
+    status: 'Warning',
+    tone: 'warning',
+  },
+  {
+    category: 'Expenses',
+    message: 'Two approvals are sitting in review and need a final decision before close.',
+    status: 'Warning',
+    tone: 'warning',
+  },
+  {
+    category: 'Reputation',
+    message: 'A negative guest review is still open and should be answered today.',
+    status: 'Critical',
+    tone: 'critical',
+  },
+  {
+    category: 'Vendors',
+    message: 'Partner follow-up is on track with no blocked escalation at the moment.',
+    status: 'Normal',
+    tone: 'normal',
+  },
+] as const
+
+function LandingCard({
+  children,
+  className = '',
+}: {
+  children: ReactNode
+  className?: string
+}) {
+  return (
+    <SurfaceCard
+      title=""
+      description=""
+      className={[
+        'rounded-2xl border-slate-100 bg-white p-8 shadow-sm backdrop-blur-none',
+        '[&>div:first-child]:hidden [&>div:last-child]:mt-0',
+        className,
+      ]
+        .filter(Boolean)
+        .join(' ')}
+    >
+      {children}
+    </SurfaceCard>
+  )
+}
+
+function LandingLabel({ children }: { children: ReactNode }) {
+  return (
+    <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">
+      {children}
+    </p>
+  )
+}
+
 export function Landing() {
   return (
-    <div className="min-h-screen px-5 py-8 md:px-8 md:py-10">
-      <div className="mx-auto max-w-6xl space-y-8">
-        <div className="flex items-center justify-between">
-          <div className="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-950 text-sm font-semibold text-white shadow-shell">
+    <div className="min-h-screen bg-slate-50/60 px-5 py-8 md:px-8 md:py-10">
+      <div className="mx-auto max-w-7xl space-y-8">
+        <div className="flex items-center justify-between gap-6">
+          <div className="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-950 text-sm font-semibold text-white shadow-sm">
             OC
           </div>
 
@@ -44,156 +122,93 @@ export function Landing() {
           </div>
         </div>
 
-        <div className="grid gap-4 xl:grid-cols-[minmax(0,1.38fr)_minmax(0,0.62fr)]">
-          <SurfaceCard
-            title="Operations, made readable."
-            description="From fragmented tracking to a clear operational system."
-            className="h-full"
-          >
-            <div className="space-y-6">
-              <p className="max-w-2xl text-sm text-slate-600">
-                Ops Core gives teams one place to monitor incidents, operational spend,
-                partners, and guest quality without losing the context of the day.
-              </p>
+        <div className="grid gap-8 xl:grid-cols-[minmax(0,1.38fr)_minmax(0,0.62fr)]">
+          <LandingCard className="h-full">
+            <LandingLabel>Ops Core V12</LandingLabel>
+            <h1 className="mt-6 text-4xl font-bold tracking-tighter text-black md:text-5xl">
+              I turn fragmented operations into structured systems.
+            </h1>
+            <p className="mt-6 max-w-xl text-base leading-relaxed text-slate-500">
+              From manual workflows (Excel, calls, scattered tools) to clear,
+              reliable and trackable operations.
+            </p>
 
-              <div className="flex flex-wrap gap-3">
-                <Link
-                  to="/sign-in"
-                  className="inline-flex items-center justify-center rounded-2xl bg-slate-950 px-5 py-3 text-sm font-medium text-white transition-opacity hover:opacity-90"
-                >
-                  Sign in
-                </Link>
-                <Link
-                  to="/sign-up"
-                  className="inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-5 py-3 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
-                >
-                  Create account
-                </Link>
-              </div>
+            <div className="mt-8 flex flex-wrap gap-3">
+              <Link
+                to="/sign-in"
+                className="inline-flex items-center justify-center rounded-2xl bg-slate-950 px-5 py-3 text-sm font-medium text-white transition-opacity hover:opacity-90"
+              >
+                View work
+              </Link>
+              <a
+                href="mailto:contact@ops-core.app"
+                className="inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-5 py-3 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
+              >
+                Contact
+              </a>
             </div>
-          </SurfaceCard>
+          </LandingCard>
 
-          <SurfaceCard
-            title="Today signals"
-            description="A compact example of the operational rhythm the product makes visible."
-            className="h-full"
-          >
-            <div className="divide-y divide-slate-100">
-              {[
-                ['Maintenance', '1 overdue ticket in room 214', 'Warning'],
-                ['Expenses', '2 approvals waiting validation', 'Warning'],
-                ['Reputation', '1 guest review needs follow-up', 'Critical'],
-              ].map(([type, label, severity]) => (
+          <LandingCard className="h-full">
+            <LandingLabel>Today Signals</LandingLabel>
+            <div className="mt-6 space-y-3">
+              {signals.map((signal) => (
                 <div
-                  key={label}
-                  className="grid gap-2 py-3 md:grid-cols-[5.75rem_minmax(0,1fr)_auto] md:items-center"
+                  key={signal.category}
+                  className="flex items-center gap-4 rounded-2xl border border-slate-100 px-4 py-4"
                 >
-                  <span className="inline-flex rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.2em] text-slate-600">
-                    {type}
+                  <span className="w-24 text-[10px] font-semibold uppercase tracking-widest text-slate-400">
+                    {signal.category}
                   </span>
-                  <p className="text-sm font-medium text-slate-900">{label}</p>
+
+                  <span className="flex-1 text-sm leading-relaxed text-slate-600">
+                    {signal.message}
+                  </span>
+
                   <span
                     className={[
-                      'inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.2em]',
-                      severity === 'Critical'
-                        ? 'bg-red-50 text-red-600'
-                        : 'bg-amber-50 text-amber-600',
+                      'rounded-full px-2 py-1 text-xs font-medium',
+                      signal.tone === 'critical'
+                        ? 'bg-red-500/10 text-red-600'
+                        : signal.tone === 'warning'
+                          ? 'bg-amber-500/10 text-amber-600'
+                          : 'bg-slate-200/50 text-slate-600',
                     ].join(' ')}
                   >
-                    {severity}
+                    {signal.status}
                   </span>
                 </div>
               ))}
             </div>
-          </SurfaceCard>
+          </LandingCard>
         </div>
 
-        <div className="grid gap-4 md:grid-cols-3">
-          {benefits.map((benefit) => (
-            <SurfaceCard
-              key={benefit.title}
-              title={benefit.title}
-              description={benefit.description}
-              className="h-full"
-            />
+        <div className="grid gap-6 md:grid-cols-3">
+          {heroCards.map((card) => (
+            <LandingCard key={card.title} className="h-full">
+              <LandingLabel>{card.label}</LandingLabel>
+              <h2 className="mt-4 text-xl font-semibold tracking-tight text-slate-950">
+                {card.title}
+              </h2>
+              <p className="mt-4 text-sm leading-relaxed text-slate-500">
+                {card.description}
+              </p>
+            </LandingCard>
           ))}
         </div>
 
-        <div className="grid gap-4 xl:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)]">
-          <SurfaceCard
-            title="Product preview"
-            description="A control surface designed to make the day readable in minutes."
-            className="h-full"
-          >
-            <div className="space-y-5">
-              <div className="grid gap-3 md:grid-cols-3">
-                {[
-                  ['Open tickets', '12'],
-                  ['Today spend', '€153'],
-                  ['Active vendors', '18'],
-                ].map(([label, value]) => (
-                  <div
-                    key={label}
-                    className="rounded-2xl border border-slate-200 bg-white/70 px-4 py-4"
-                  >
-                    <div className="flex items-end justify-between gap-3">
-                      <p className="text-2xl font-semibold tracking-tight text-slate-950">
-                        {value}
-                      </p>
-                      <p className="text-[11px] uppercase tracking-[0.24em] text-slate-400">
-                        {label}
-                      </p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
-                <p className="text-sm font-semibold tracking-tight text-slate-950">
-                  Requires attention
-                </p>
-                <div className="mt-3 divide-y divide-slate-200">
-                  {[
-                    'Maintenance — 1 overdue ticket',
-                    'Expenses — 2 approvals waiting',
-                    'Reputation — 1 negative review',
-                  ].map((item) => (
-                    <p key={item} className="py-2 text-sm text-slate-600">
-                      {item}
-                    </p>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </SurfaceCard>
-
-          <SurfaceCard
-            title="Built for operational teams"
-            description="A shared SaaS workspace for people who need clean visibility before they need more meetings."
-            className="h-full"
-          >
-            <div className="space-y-6">
-              <p className="text-sm text-slate-600">
-                Use one product to spot incidents faster, review approvals sooner, and
-                keep guest-impacting issues visible while they can still be resolved.
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)]">
+          {supportingCards.map((card) => (
+            <LandingCard key={card.title} className="h-full">
+              <LandingLabel>{card.label}</LandingLabel>
+              <h2 className="mt-4 text-2xl font-semibold tracking-tight text-slate-950">
+                {card.title}
+              </h2>
+              <p className="mt-4 text-base leading-relaxed text-slate-500">
+                {card.description}
               </p>
-
-              <div className="flex flex-wrap gap-3">
-                <Link
-                  to="/sign-in"
-                  className="inline-flex items-center justify-center rounded-2xl bg-slate-950 px-5 py-3 text-sm font-medium text-white transition-opacity hover:opacity-90"
-                >
-                  Sign in
-                </Link>
-                <Link
-                  to="/sign-up"
-                  className="inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-5 py-3 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
-                >
-                  Create account
-                </Link>
-              </div>
-            </div>
-          </SurfaceCard>
+            </LandingCard>
+          ))}
         </div>
       </div>
     </div>
