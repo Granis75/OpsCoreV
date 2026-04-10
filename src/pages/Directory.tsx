@@ -3,7 +3,6 @@ import { PageSection } from '../components/ui/PageSection'
 import { SurfaceCard } from '../components/ui/SurfaceCard'
 import { ActionDrawer } from '../components/ui/ActionDrawer'
 import { isSupabaseConfigured, supabase } from '../lib/supabase'
-import type { VendorStatus } from '../types/vendors'
 
 type StaffEmploymentStatus = 'active' | 'on_leave' | 'inactive'
 interface StaffRoleRow {
@@ -108,7 +107,6 @@ const emptyForm: DirectoryFormState = {
 export function Directory() {
   if (!supabase) return null
   const db = supabase
-
   const [staff, setStaff] = useState<StaffRecord[]>([])
   const [staffRoleMap, setStaffRoleMap] = useState<Map<string, string>>(new Map())
   const [isLoading, setIsLoading] = useState(true)
