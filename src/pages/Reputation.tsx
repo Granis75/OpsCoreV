@@ -186,20 +186,20 @@ export function Reputation() {
           { count: totalReviewsCount, error: totalReviewsError },
           { count: negativeReviewsCount, error: negativeReviewsError },
         ] = await Promise.all([
-          supabase
+          supabase!
             .from('reputation_snapshots')
             .select('id, snapshot_date, average_rating, review_count')
             .is('review_source_id', null)
             .order('snapshot_date', { ascending: false })
             .limit(2),
-          supabase
+          supabase!
             .from('reviews')
             .select('id, review_source_id, rating, title, body, reviewed_at')
             .order('reviewed_at', { ascending: false })
             .limit(8),
-          supabase.from('review_sources').select('id, name'),
-          supabase.from('reviews').select('id', { count: 'exact', head: true }),
-          supabase
+          supabase!.from('review_sources').select('id, name'),
+          supabase!.from('reviews').select('id', { count: 'exact', head: true }),
+          supabase!
             .from('reviews')
             .select('id', { count: 'exact', head: true })
             .lte('rating', 3),
@@ -267,7 +267,8 @@ export function Reputation() {
 
   const globalScore = getGlobalScore(snapshots, reviews)
   const trend = getTrend(snapshots, reviews)
-  const negativeOnly = searchParams.get('filter') === 'negative'
+  const negativeOnly =
+    searchParams.get('filter') === 'negative' || searchParams.get('rating') === 'low'
   const searchQuery = searchParams.get('q')?.trim().toLowerCase() ?? ''
   const filteredReviews = reviews.filter((review) => {
     if (negativeOnly && !isNegativeReview(review)) {

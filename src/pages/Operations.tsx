@@ -13,6 +13,7 @@ type FilterValue<T extends string> = 'all' | T
 
 interface OperationItem {
   id: string
+  created_by_profile_id: string | null
   type: OperationItemType
   title: string
   status: OperationItemStatus
@@ -31,8 +32,15 @@ interface OperationFormState {
   title: string
   priority: OperationItemPriority
   status: OperationItemStatus
+  assignedStaffId: string
   location: string
   notes: string
+}
+
+interface StaffOption {
+  id: string
+  first_name: string
+  last_name: string
 }
 
 const typeLabels: Record<OperationItemType, string> = {
@@ -75,8 +83,13 @@ const defaultFormState: OperationFormState = {
   title: '',
   priority: 'medium',
   status: 'open',
+  assignedStaffId: '',
   location: '',
   notes: '',
+}
+
+function buildStaffName(staff: StaffOption) {
+  return `${staff.first_name} ${staff.last_name}`.trim()
 }
 
 function hasMissingOperationsSchema(code?: string) {
@@ -257,7 +270,7 @@ async function getAuthenticatedContext() {
     throw new Error('Sign in to view live operations control.')
   }
 
-  const { data: profileRow, error: profileError } = await supabase
+  const { data: profileRow, error: profileError } = await supabase!
     .from('profiles')
     .select('organization_id')
     .eq('id', session.user.id)
@@ -299,14 +312,24 @@ function OperationsKpiCard({ label, value }: OperationsKpiCardProps) {
 
 interface OperationQueueItemProps {
   item: OperationItem
-  onEdit: (item: OperationItem) => void
+  assigneeLabel: string
+  onOpen: (item: OperationItem) => void
 }
 
-function OperationQueueItem({ item, onEdit }: OperationQueueItemProps) {
+function OperationQueueItem({ item, assigneeLabel, onOpen }: OperationQueueItemProps) {
   return (
     <div
+      role="button"
+      tabIndex={0}
+      onClick={() => onOpen(item)}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault()
+          onOpen(item)
+        }
+      }}
       className={[
-        'rounded-2xl border px-3.5 py-3 transition-all duration-150 hover:-translate-y-px',
+        'cursor-pointer rounded-lg border px-3.5 py-3 transition-all duration-150 hover:-translate-y-px',
         getItemSurfaceClasses(item.priority),
       ].join(' ')}
     >
@@ -346,6 +369,9 @@ function OperationQueueItem({ item, onEdit }: OperationQueueItemProps) {
             {item.notes ? (
               <p className="text-sm text-slate-600">{item.notes}</p>
             ) : null}
+            <p className="text-xs font-medium uppercase tracking-[0.16em] text-slate-400">
+              Assigned: {assigneeLabel}
+            </p>
           </div>
         </div>
 
@@ -359,10 +385,13 @@ function OperationQueueItem({ item, onEdit }: OperationQueueItemProps) {
 
           <button
             type="button"
-            onClick={() => onEdit(item)}
+            onClick={(event) => {
+              event.stopPropagation()
+              onOpen(item)
+            }}
             className="button-pill min-h-8 px-3 py-1 text-[11px] uppercase tracking-[0.2em]"
           >
-            Edit
+            Open
           </button>
         </div>
       </div>
@@ -373,6 +402,7 @@ function OperationQueueItem({ item, onEdit }: OperationQueueItemProps) {
 export function Operations() {
   const [searchParams] = useSearchParams()
   const [items, setItems] = useState<OperationItem[]>([])
+  const [staffOptions, setStaffOptions] = useState<StaffOption[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [typeFilter, setTypeFilter] = useState<FilterValue<OperationItemType>>('all')
@@ -417,25 +447,42 @@ export function Operations() {
       try {
         await getAuthenticatedContext()
 
-        const { data, error } = await supabase
-          .from('operation_items')
-          .select('id, type, title, status, priority, created_at, location, notes')
-          .order('created_at', { ascending: false })
-          .limit(100)
+        const [
+          { data: operationRows, error: operationsError },
+          { data: staffRows, error: staffError },
+        ] = await Promise.all([
+          supabase!
+            .from('operation_items')
+            .select(
+              'id, created_by_profile_id, type, title, status, priority, created_at, location, notes',
+            )
+            .order('created_at', { ascending: false })
+            .limit(100),
+          supabase!
+            .from('staff_directory')
+            .select('id, first_name, last_name')
+            .in('employment_status', ['active', 'on_leave'])
+            .order('last_name', { ascending: true }),
+        ])
 
-        if (error) {
-          if (hasMissingOperationsSchema(error.code)) {
+        if (operationsError) {
+          if (hasMissingOperationsSchema(operationsError.code)) {
             if (!isCancelled) {
               setItems([])
             }
             return
           }
 
-          throw error
+          throw operationsError
+        }
+
+        if (staffError) {
+          throw staffError
         }
 
         if (!isCancelled) {
-          setItems((data as OperationItem[] | null) ?? [])
+          setItems((operationRows as OperationItem[] | null) ?? [])
+          setStaffOptions((staffRows as StaffOption[] | null) ?? [])
         }
       } catch (error) {
         console.error('Unable to load operations items', error)
@@ -466,6 +513,9 @@ export function Operations() {
     matchesFilters(item, typeFilter, statusFilter, priorityFilter, searchQuery),
   )
   const kpis = getKpis(items)
+  const staffNameMap = new Map(
+    staffOptions.map((staffMember) => [staffMember.id, buildStaffName(staffMember)]),
+  )
 
   async function handleSaveItem(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -487,25 +537,28 @@ export function Operations() {
 
     try {
       const context = await getAuthenticatedContext()
+      const nextAssignedStaffId = formState.assignedStaffId || context.userId
       const payload = {
         type: formState.type,
         title,
         status: formState.status,
         priority: formState.priority,
+        created_by_profile_id: nextAssignedStaffId,
         location: formState.location.trim() || null,
         notes: formState.notes.trim() || null,
       }
 
       const query = editingItemId
-        ? supabase.from('operation_items').update(payload).eq('id', editingItemId)
-        : supabase.from('operation_items').insert({
+        ? supabase!.from('operation_items').update(payload).eq('id', editingItemId)
+        : supabase!.from('operation_items').insert({
             organization_id: context.organizationId,
-            created_by_profile_id: context.userId,
             ...payload,
           })
 
       const { data, error } = await query
-        .select('id, type, title, status, priority, created_at, location, notes')
+        .select(
+          'id, created_by_profile_id, type, title, status, priority, created_at, location, notes',
+        )
         .single()
 
       if (error) {
@@ -558,6 +611,7 @@ export function Operations() {
       title: item.title,
       priority: item.priority,
       status: item.status,
+      assignedStaffId: item.created_by_profile_id ?? '',
       location: item.location ?? '',
       notes: item.notes ?? '',
     })
@@ -693,7 +747,10 @@ export function Operations() {
                 <OperationQueueItem
                   key={item.id}
                   item={item}
-                  onEdit={openEditModal}
+                  assigneeLabel={
+                    staffNameMap.get(item.created_by_profile_id ?? '') ?? 'Unassigned'
+                  }
+                  onOpen={openEditModal}
                 />
               ))}
             </div>
@@ -771,6 +828,29 @@ export function Operations() {
                       <option value="in_progress">In progress</option>
                       <option value="blocked">Blocked</option>
                       <option value="done">Done</option>
+                    </select>
+                  </div>
+                  <div className="space-y-2">
+              <label htmlFor="operation-assignee" className="eyebrow-label">
+                Assign to
+              </label>
+              <select
+                      id="operation-assignee"
+                      value={formState.assignedStaffId}
+                      onChange={(event) =>
+                        setFormState((currentState) => ({
+                          ...currentState,
+                          assignedStaffId: event.target.value,
+                        }))
+                      }
+                className="field-input w-full"
+                    >
+                      <option value="">No assignee</option>
+                      {staffOptions.map((staffMember) => (
+                        <option key={staffMember.id} value={staffMember.id}>
+                          {buildStaffName(staffMember)}
+                        </option>
+                      ))}
                     </select>
                   </div>
                 <div className="space-y-2">
@@ -855,4 +935,3 @@ export function Operations() {
     </PageSection>
   )
 }
-

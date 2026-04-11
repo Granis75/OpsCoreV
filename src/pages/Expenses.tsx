@@ -1,10 +1,12 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { useSearchParams } from 'react-router-dom'
+import { ActionDrawer } from '../components/ui/ActionDrawer'
 import { PageSection } from '../components/ui/PageSection'
 import { SurfaceCard } from '../components/ui/SurfaceCard'
 import { isSupabaseConfigured, supabase } from '../lib/supabase'
 
 type ExpenseStatus = 'draft' | 'submitted' | 'approved' | 'rejected' | 'reimbursed'
+type PaymentType = 'cash' | 'card' | 'vendor'
 
 interface ExpenseCategoryRow {
   id: string
@@ -75,6 +77,80 @@ function getStatusLabel(status: ExpenseStatus) {
   return status.replace(/_/g, ' ')
 }
 
+function getStatusClasses(status: ExpenseStatus) {
+  if (status === 'submitted') {
+    return 'bg-amber-50 text-amber-700'
+  }
+
+  if (status === 'approved' || status === 'reimbursed') {
+    return 'bg-emerald-50 text-emerald-700'
+  }
+
+  if (status === 'rejected') {
+    return 'bg-red-50 text-red-700'
+  }
+
+  return 'bg-slate-100 text-slate-700'
+}
+
+function getPaymentTypeLabel(type: PaymentType) {
+  if (type === 'vendor') {
+    return 'Vendor'
+  }
+
+  if (type === 'card') {
+    return 'Card'
+  }
+
+  return 'Cash'
+}
+
+function inferPaymentType(expense: ExpenseRecord, categoryName: string): PaymentType {
+  const source = `${expense.description} ${categoryName}`.toLowerCase()
+
+  if (
+    source.includes('vendor') ||
+    source.includes('supplier') ||
+    source.includes('invoice')
+  ) {
+    return 'vendor'
+  }
+
+  if (
+    source.includes('card') ||
+    source.includes('visa') ||
+    source.includes('mastercard') ||
+    source.includes('amex')
+  ) {
+    return 'card'
+  }
+
+  return 'cash'
+}
+
+function getExpenseStatusActions(status: ExpenseStatus) {
+  if (status === 'draft') {
+    return [{ label: 'Submit expense', value: 'submitted' as const }]
+  }
+
+  if (status === 'submitted') {
+    return [
+      { label: 'Approve expense', value: 'approved' as const },
+      { label: 'Reject expense', value: 'rejected' as const },
+    ]
+  }
+
+  if (status === 'approved') {
+    return [{ label: 'Mark reimbursed', value: 'reimbursed' as const }]
+  }
+
+  if (status === 'rejected') {
+    return [{ label: 'Move back to draft', value: 'draft' as const }]
+  }
+
+  return []
+}
+
 interface ExpenseKpis {
   todaySpend: number
   monthlySpend: number
@@ -101,6 +177,12 @@ function buildExpenseKpis(expenses: ExpenseRecord[]): ExpenseKpis {
 
 interface ExpenseFormState {
   label: string
+  amount: string
+  expenseCategoryId: string
+}
+
+interface ExpenseEditState {
+  description: string
   amount: string
   expenseCategoryId: string
 }
@@ -136,6 +218,16 @@ export function Expenses() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [selectedExpenseId, setSelectedExpenseId] = useState<string | null>(null)
+  const [isUpdatingStatus, setIsUpdatingStatus] = useState(false)
+  const [isSavingEdit, setIsSavingEdit] = useState(false)
+  const [isDeletingExpense, setIsDeletingExpense] = useState(false)
+  const [drawerErrorMessage, setDrawerErrorMessage] = useState<string | null>(null)
+  const [editState, setEditState] = useState<ExpenseEditState>({
+    description: '',
+    amount: '',
+    expenseCategoryId: '',
+  })
   const [formState, setFormState] = useState<ExpenseFormState>({
     label: '',
     amount: '',
@@ -181,13 +273,13 @@ export function Expenses() {
           { data: expenseRows, error: expensesError },
           { data: categoryRows, error: categoriesError },
         ] = await Promise.all([
-          supabase
+          supabase!
             .from('cash_expenses')
             .select(
               'id, expense_category_id, expense_date, amount, currency_code, description, status',
             )
             .order('expense_date', { ascending: false }),
-          supabase.from('expense_categories').select('id, name'),
+          supabase!.from('expense_categories').select('id, name'),
         ])
 
         if (expensesError) {
@@ -260,6 +352,151 @@ export function Expenses() {
 
     return [expense.description, categoryName].join(' ').toLowerCase().includes(searchQuery)
   })
+  const selectedExpense = expenses.find((expense) => expense.id === selectedExpenseId) ?? null
+  const selectedCategoryName = selectedExpense
+    ? categoryMap.get(selectedExpense.expense_category_id) ?? 'Uncategorized'
+    : ''
+  const selectedPaymentType = selectedExpense
+    ? inferPaymentType(selectedExpense, selectedCategoryName)
+    : null
+
+  useEffect(() => {
+    if (!selectedExpense) {
+      return
+    }
+
+    setEditState({
+      description: selectedExpense.description,
+      amount: String(getAmountValue(selectedExpense)),
+      expenseCategoryId: selectedExpense.expense_category_id,
+    })
+  }, [selectedExpense])
+
+  async function updateExpenseStatus(nextStatus: ExpenseStatus) {
+    if (!selectedExpenseId || !supabase) {
+      return
+    }
+
+    setIsUpdatingStatus(true)
+    setDrawerErrorMessage(null)
+
+    try {
+      const { data, error } = await supabase!
+        .from('cash_expenses')
+        .update({ status: nextStatus })
+        .eq('id', selectedExpenseId)
+        .select(
+          'id, expense_category_id, expense_date, amount, currency_code, description, status',
+        )
+        .single()
+
+      if (error) {
+        throw error
+      }
+
+      const nextExpense = data as ExpenseRecord
+
+      setExpenses((currentExpenses) =>
+        currentExpenses.map((expense) =>
+          expense.id === nextExpense.id ? nextExpense : expense,
+        ),
+      )
+    } catch (error) {
+      console.error('Unable to update expense status', error)
+      setDrawerErrorMessage(
+        error instanceof Error ? error.message : 'Unable to update this expense right now.',
+      )
+    } finally {
+      setIsUpdatingStatus(false)
+    }
+  }
+
+  async function saveExpenseEdits() {
+    if (!selectedExpense || !supabase) {
+      return
+    }
+
+    const nextDescription = editState.description.trim()
+    const nextAmount = Number(editState.amount)
+
+    if (
+      !nextDescription ||
+      !editState.expenseCategoryId ||
+      Number.isNaN(nextAmount) ||
+      nextAmount <= 0
+    ) {
+      setDrawerErrorMessage('Enter a valid description, amount, and category.')
+      return
+    }
+
+    setIsSavingEdit(true)
+    setDrawerErrorMessage(null)
+
+    try {
+      const { data, error } = await supabase!
+        .from('cash_expenses')
+        .update({
+          description: nextDescription,
+          amount: nextAmount,
+          expense_category_id: editState.expenseCategoryId,
+        })
+        .eq('id', selectedExpense.id)
+        .select(
+          'id, expense_category_id, expense_date, amount, currency_code, description, status',
+        )
+        .single()
+
+      if (error) {
+        throw error
+      }
+
+      const updatedExpense = data as ExpenseRecord
+      setExpenses((currentExpenses) =>
+        currentExpenses.map((expense) =>
+          expense.id === updatedExpense.id ? updatedExpense : expense,
+        ),
+      )
+    } catch (error) {
+      console.error('Unable to update expense', error)
+      setDrawerErrorMessage(
+        error instanceof Error ? error.message : 'Unable to edit this expense right now.',
+      )
+    } finally {
+      setIsSavingEdit(false)
+    }
+  }
+
+  async function deleteExpense() {
+    if (!selectedExpense || !supabase) {
+      return
+    }
+
+    setIsDeletingExpense(true)
+    setDrawerErrorMessage(null)
+
+    try {
+      const { error } = await supabase!
+        .from('cash_expenses')
+        .delete()
+        .eq('id', selectedExpense.id)
+
+      if (error) {
+        throw error
+      }
+
+      setExpenses((currentExpenses) =>
+        currentExpenses.filter((expense) => expense.id !== selectedExpense.id),
+      )
+      setSelectedExpenseId(null)
+    } catch (error) {
+      console.error('Unable to delete expense', error)
+      setDrawerErrorMessage(
+        error instanceof Error ? error.message : 'Unable to delete this expense right now.',
+      )
+    } finally {
+      setIsDeletingExpense(false)
+    }
+  }
 
   async function handleCreateExpense(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -296,7 +533,7 @@ export function Expenses() {
         throw new Error('Sign in to add an expense.')
       }
 
-      const { data: profileRow, error: profileError } = await supabase
+      const { data: profileRow, error: profileError } = await supabase!
         .from('profiles')
         .select('organization_id')
         .eq('id', session.user.id)
@@ -312,7 +549,7 @@ export function Expenses() {
         throw new Error('Your profile is not linked to an organization.')
       }
 
-      const { data: insertedExpense, error: insertError } = await supabase
+      const { data: insertedExpense, error: insertError } = await supabase!
         .from('cash_expenses')
         .insert({
           organization_id: organizationId,
@@ -421,6 +658,9 @@ export function Expenses() {
                     Amount
                   </th>
                   <th className="border-b border-slate-200 px-0 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                    Payment
+                  </th>
+                  <th className="border-b border-slate-200 px-0 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
                     Status
                   </th>
                 </tr>
@@ -431,11 +671,28 @@ export function Expenses() {
                   const flagged = isFlagged(expense)
                   const categoryName =
                     categoryMap.get(expense.expense_category_id) ?? 'Uncategorized'
+                  const paymentType = inferPaymentType(expense, categoryName)
 
                   return (
                     <tr
                       key={expense.id}
-                      className={flagged ? 'bg-amber-50/30' : undefined}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => {
+                        setSelectedExpenseId(expense.id)
+                        setDrawerErrorMessage(null)
+                      }}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter' || event.key === ' ') {
+                          event.preventDefault()
+                          setSelectedExpenseId(expense.id)
+                          setDrawerErrorMessage(null)
+                        }
+                      }}
+                      className={[
+                        'cursor-pointer transition-colors hover:bg-slate-50',
+                        flagged ? 'bg-amber-50/30' : '',
+                      ].join(' ')}
                     >
                       <td className="border-b border-slate-100 py-4 pr-6 text-sm text-slate-600">
                         {formatExpenseDate(expense.expense_date)}
@@ -453,9 +710,17 @@ export function Expenses() {
                       <td className="border-b border-slate-100 py-4 pr-6 text-sm font-semibold text-slate-900">
                         {formatCurrency(getAmountValue(expense), expense.currency_code)}
                       </td>
+                      <td className="border-b border-slate-100 py-4 pr-6 text-sm text-slate-600">
+                        {getPaymentTypeLabel(paymentType)}
+                      </td>
                       <td className="border-b border-slate-100 py-4">
                         <div className="space-y-1">
-                          <span className="inline-flex rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold capitalize text-slate-600">
+                          <span
+                            className={[
+                              'inline-flex rounded-full px-2.5 py-1 text-xs font-semibold capitalize',
+                              getStatusClasses(expense.status),
+                            ].join(' ')}
+                          >
                             {getStatusLabel(expense.status)}
                           </span>
                           {flagged ? (
@@ -578,7 +843,142 @@ export function Expenses() {
           </div>
         </div>
       ) : null}
+
+      <ActionDrawer
+        isOpen={Boolean(selectedExpense)}
+        onClose={() => setSelectedExpenseId(null)}
+        title={selectedExpense?.description ?? 'Expense detail'}
+      >
+        {selectedExpense ? (
+          <div className="space-y-6">
+            <div className="flex flex-wrap gap-2">
+              <span
+                className={[
+                  'inline-flex rounded-full px-2.5 py-1 text-xs font-semibold capitalize',
+                  getStatusClasses(selectedExpense.status),
+                ].join(' ')}
+              >
+                {getStatusLabel(selectedExpense.status)}
+              </span>
+              <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700">
+                {selectedPaymentType ? getPaymentTypeLabel(selectedPaymentType) : 'Cash'}
+              </span>
+              {isFlagged(selectedExpense) ? (
+                <span className="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700">
+                  Approval sensitive
+                </span>
+              ) : null}
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-1">
+                <p className="eyebrow-label">Amount</p>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={editState.amount}
+                  onChange={(event) =>
+                    setEditState((currentState) => ({
+                      ...currentState,
+                      amount: event.target.value,
+                    }))
+                  }
+                  className="field-input"
+                />
+              </div>
+              <div className="space-y-1">
+                <p className="eyebrow-label">Date</p>
+                <p className="text-sm text-slate-700">
+                  {formatExpenseDate(selectedExpense.expense_date)}
+                </p>
+              </div>
+              <div className="space-y-1">
+                <p className="eyebrow-label">Category</p>
+                <select
+                  value={editState.expenseCategoryId}
+                  onChange={(event) =>
+                    setEditState((currentState) => ({
+                      ...currentState,
+                      expenseCategoryId: event.target.value,
+                    }))
+                  }
+                  className="field-input"
+                >
+                  <option value="">Select category</option>
+                  {categories.map((category) => (
+                    <option key={category.id} value={category.id}>
+                      {category.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-1">
+                <p className="eyebrow-label">Payment type</p>
+                <p className="text-sm text-slate-700">
+                  {selectedPaymentType ? getPaymentTypeLabel(selectedPaymentType) : 'Cash'}
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <p className="eyebrow-label">Description</p>
+              <textarea
+                value={editState.description}
+                onChange={(event) =>
+                  setEditState((currentState) => ({
+                    ...currentState,
+                    description: event.target.value,
+                  }))
+                }
+                className="field-input min-h-[110px]"
+              />
+            </div>
+
+            <div className="grid gap-2 sm:grid-cols-2">
+              <button
+                type="button"
+                onClick={() => void saveExpenseEdits()}
+                disabled={isSavingEdit}
+                className="button-primary justify-center"
+              >
+                {isSavingEdit ? 'Saving...' : 'Save edits'}
+              </button>
+              <button
+                type="button"
+                onClick={() => void deleteExpense()}
+                disabled={isDeletingExpense}
+                className="button-secondary justify-center"
+              >
+                {isDeletingExpense ? 'Deleting...' : 'Delete expense'}
+              </button>
+            </div>
+
+            {getExpenseStatusActions(selectedExpense.status).length > 0 ? (
+              <div className="space-y-3">
+                <p className="eyebrow-label">Actions</p>
+                <div className="grid gap-2">
+                  {getExpenseStatusActions(selectedExpense.status).map((action) => (
+                    <button
+                      key={action.value}
+                      type="button"
+                      onClick={() => void updateExpenseStatus(action.value)}
+                      disabled={isUpdatingStatus}
+                      className="button-secondary justify-center"
+                    >
+                      {isUpdatingStatus ? 'Saving...' : action.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+
+            {drawerErrorMessage ? (
+              <p className="text-sm text-rose-600">{drawerErrorMessage}</p>
+            ) : null}
+          </div>
+        ) : null}
+      </ActionDrawer>
     </PageSection>
   )
 }
-

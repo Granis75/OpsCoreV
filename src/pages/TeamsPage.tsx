@@ -1,13 +1,14 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import {
   AlertCircle,
-  ArrowRight,
   Building2,
   RefreshCcw,
   ShieldCheck,
   Users2,
   type LucideIcon,
 } from 'lucide-react'
+import { Link, useSearchParams } from 'react-router-dom'
+import { ActionDrawer } from '../components/ui/ActionDrawer'
 import { SurfaceCard } from '../components/ui/SurfaceCard'
 import { isSupabaseConfigured, supabase } from '../lib/supabase'
 
@@ -15,6 +16,7 @@ type PriorityLevel = 'low' | 'medium' | 'high' | 'critical'
 type OperationItemStatus = 'open' | 'in_progress' | 'blocked' | 'done'
 type OperationItemType = 'ticket' | 'task' | 'intervention' | 'order'
 type TeamLoadTone = 'low' | 'medium' | 'high'
+type StaffEmploymentStatus = 'active' | 'on_leave' | 'inactive'
 
 interface TeamRow {
   id: string
@@ -31,12 +33,17 @@ interface StaffRoleRow {
 }
 
 interface StaffRow {
+  id: string
+  first_name: string
+  last_name: string
+  employment_status: StaffEmploymentStatus
   team_id: string | null
   staff_role_id: string | null
 }
 
 interface OperationItemRow {
   id: string
+  created_by_profile_id: string | null
   type: OperationItemType
   title: string
   status: OperationItemStatus
@@ -75,12 +82,15 @@ interface RoleCard {
 
 interface CoordinationCard {
   id: string
+  teamId: string | null
+  assigneeProfileId: string | null
   title: string
   type: OperationItemType
   status: OperationItemStatus
   priority: PriorityLevel
   note: string
   createdAt: string
+  location: string | null
 }
 
 const typeLabels: Record<OperationItemType, string> = {
@@ -234,6 +244,19 @@ function formatCreatedAt(value: string) {
   }).format(date)
 }
 
+function buildOperationsHref(item: CoordinationCard) {
+  const searchParams = new URLSearchParams()
+  searchParams.set('q', item.title)
+  searchParams.set('type', item.type)
+  searchParams.set('priority', item.priority)
+
+  return `/app/operations?${searchParams.toString()}`
+}
+
+function buildStaffName(staff: Pick<StaffRow, 'first_name' | 'last_name'>) {
+  return `${staff.first_name} ${staff.last_name}`.trim()
+}
+
 function getTeamHandoff({
   blockedItemsCount,
   inProgressItemsCount,
@@ -278,13 +301,28 @@ function getOperationTeamId(item: OperationItemRow, teams: TeamRow[]) {
 }
 
 export function TeamsPage() {
+  const [searchParams, setSearchParams] = useSearchParams()
   const [teams, setTeams] = useState<TeamCard[]>([])
   const [roles, setRoles] = useState<RoleCard[]>([])
+  const [staffMembers, setStaffMembers] = useState<StaffRow[]>([])
   const [coordinationItems, setCoordinationItems] = useState<CoordinationCard[]>(
     [],
   )
   const [isLoading, setIsLoading] = useState(true)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  const [isReassigningItemId, setIsReassigningItemId] = useState<string | null>(null)
+  const [drawerErrorMessage, setDrawerErrorMessage] = useState<string | null>(null)
+
+  const selectedTeamId = searchParams.get('team')
+  const selectedTeam = teams.find((team) => team.id === selectedTeamId) ?? null
+  const selectedTeamStaff = selectedTeam
+    ? staffMembers.filter((member) => member.team_id === selectedTeam.id)
+    : []
+  const staffRoleMap = new Map(roles.map((role) => [role.id, role.title]))
+  const selectedTeamItems = selectedTeam
+    ? coordinationItems.filter((item) => item.teamId === selectedTeam.id).slice(0, 6)
+    : []
+  const visibleCoordinationItems = coordinationItems.slice(0, 6)
 
   useEffect(() => {
     async function load() {
@@ -315,24 +353,26 @@ export function TeamsPage() {
           { data: operationRows, error: operationsError },
           { data: maintenanceRows, error: maintenanceError },
         ] = await Promise.all([
-          supabase
+          supabase!
             .from('teams')
             .select('id, name, code, description')
             .order('name', { ascending: true }),
-          supabase
+          supabase!
             .from('staff_roles')
             .select('id, name, department, description')
             .order('name', { ascending: true }),
-          supabase
+          supabase!
             .from('staff_directory')
-            .select('team_id, staff_role_id')
+            .select('id, first_name, last_name, employment_status, team_id, staff_role_id')
             .in('employment_status', ['active', 'on_leave']),
-          supabase
+          supabase!
             .from('operation_items')
-            .select('id, type, title, status, priority, location, notes, created_at')
+            .select(
+              'id, created_by_profile_id, type, title, status, priority, location, notes, created_at',
+            )
             .in('status', ['open', 'in_progress', 'blocked'])
             .order('created_at', { ascending: false }),
-          supabase
+          supabase!
             .from('maintenance_tickets')
             .select('team_id, status')
             .in('status', ['open', 'in_progress']),
@@ -448,9 +488,13 @@ export function TeamsPage() {
           })),
         )
 
+        setStaffMembers(nextStaff)
+
         setCoordinationItems(
-          nextOperations.slice(0, 6).map((item) => ({
+          nextOperations.map((item) => ({
             id: item.id,
+            teamId: getOperationTeamId(item, nextTeams),
+            assigneeProfileId: item.created_by_profile_id,
             title: item.title,
             type: item.type,
             status: item.status,
@@ -460,6 +504,7 @@ export function TeamsPage() {
               item.location ??
               'Coordination is active and waiting for the next operational update.',
             createdAt: item.created_at,
+            location: item.location,
           })),
         )
       } catch (error) {
@@ -476,6 +521,58 @@ export function TeamsPage() {
 
     void load()
   }, [])
+
+  function openTeamDetail(teamId: string) {
+    const nextParams = new URLSearchParams(searchParams)
+    nextParams.set('team', teamId)
+    setSearchParams(nextParams)
+  }
+
+  function closeTeamDetail() {
+    const nextParams = new URLSearchParams(searchParams)
+    nextParams.delete('team')
+    setSearchParams(nextParams)
+    setDrawerErrorMessage(null)
+  }
+
+  async function updateTeamItemAssignee(itemId: string, assigneeProfileId: string) {
+    if (!supabase) {
+      return
+    }
+
+    const nextAssigneeId = assigneeProfileId || null
+    setIsReassigningItemId(itemId)
+    setDrawerErrorMessage(null)
+
+    try {
+      const { error } = await supabase!
+        .from('operation_items')
+        .update({ created_by_profile_id: nextAssigneeId })
+        .eq('id', itemId)
+
+      if (error) {
+        throw error
+      }
+
+      setCoordinationItems((currentItems) =>
+        currentItems.map((item) =>
+          item.id === itemId
+            ? {
+                ...item,
+                assigneeProfileId: nextAssigneeId,
+              }
+            : item,
+        ),
+      )
+    } catch (error) {
+      console.error('Unable to reassign operation item', error)
+      setDrawerErrorMessage(
+        error instanceof Error ? error.message : 'Unable to reassign this item right now.',
+      )
+    } finally {
+      setIsReassigningItemId(null)
+    }
+  }
 
   return (
     <section className="mx-auto flex max-w-7xl flex-col gap-8">
@@ -537,9 +634,11 @@ export function TeamsPage() {
           ) : teams.length > 0 ? (
             <div className="space-y-4">
               {teams.map((team) => (
-                <article
+                <button
                   key={team.id}
-                  className="surface-panel p-5"
+                  type="button"
+                  onClick={() => openTeamDetail(team.id)}
+                  className="surface-panel interactive-lift w-full p-5 text-left"
                 >
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div className="space-y-1">
@@ -627,7 +726,7 @@ export function TeamsPage() {
                       </p>
                     </div>
                   </div>
-                </article>
+                </button>
               ))}
             </div>
           ) : (
@@ -659,9 +758,10 @@ export function TeamsPage() {
           ) : roles.length > 0 ? (
             <div className="space-y-3">
               {roles.map((role) => (
-                <article
+                <Link
                   key={role.id}
-                  className="surface-muted p-4"
+                  to={`/app/directory?role=${encodeURIComponent(role.id)}`}
+                  className="surface-muted interactive-lift block cursor-pointer p-4"
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="space-y-1">
@@ -671,18 +771,17 @@ export function TeamsPage() {
                       <p className="eyebrow-label">
                         {role.scope}
                       </p>
-                    </div>
+                  </div>
                     <div className="flex items-center gap-3">
                       <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600">
                         {pluralize(role.assignedCount, 'assigned', 'assigned')}
                       </span>
-                      <ArrowRight className="mt-0.5 h-4 w-4 text-slate-300" />
                     </div>
                   </div>
                   <p className="mt-3 text-sm leading-6 text-slate-600">
                     {role.responsibility}
                   </p>
-                </article>
+                </Link>
               ))}
             </div>
           ) : (
@@ -714,10 +813,11 @@ export function TeamsPage() {
           </div>
         ) : coordinationItems.length > 0 ? (
           <div className="grid gap-4 lg:grid-cols-3">
-            {coordinationItems.map((item) => (
-              <article
+            {visibleCoordinationItems.map((item) => (
+              <Link
                 key={item.id}
-                className="surface-panel p-5"
+                to={buildOperationsHref(item)}
+                className="surface-panel interactive-lift block p-5"
               >
                 <div className="space-y-4">
                   <div className="flex items-start justify-between gap-3">
@@ -764,7 +864,7 @@ export function TeamsPage() {
                     {formatCreatedAt(item.createdAt)}
                   </p>
                 </div>
-              </article>
+              </Link>
             ))}
           </div>
         ) : (
@@ -775,6 +875,186 @@ export function TeamsPage() {
           </div>
         )}
       </SectionCard>
+
+      <ActionDrawer
+        isOpen={Boolean(selectedTeam)}
+        onClose={closeTeamDetail}
+        title={selectedTeam?.name ?? 'Team detail'}
+      >
+        {selectedTeam ? (
+          <div className="space-y-6">
+            <div className="grid gap-3 sm:grid-cols-3">
+              <div className="surface-muted px-3 py-3">
+                <p className="eyebrow-label">Staff</p>
+                <p className="mt-1 text-sm font-semibold text-slate-900">
+                  {selectedTeam.staffCount}
+                </p>
+              </div>
+              <div className="surface-muted px-3 py-3">
+                <p className="eyebrow-label">Open + in progress</p>
+                <p className="mt-1 text-sm font-semibold text-slate-900">
+                  {selectedTeam.openItemsCount + selectedTeam.inProgressItemsCount}
+                </p>
+              </div>
+              <div className="surface-muted px-3 py-3">
+                <p className="eyebrow-label">Blocked</p>
+                <p
+                  className={[
+                    'mt-1 text-sm font-semibold',
+                    selectedTeam.blockedItemsCount > 0 ? 'text-red-600' : 'text-slate-900',
+                  ].join(' ')}
+                >
+                  {selectedTeam.blockedItemsCount}
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-1">
+              <p className="eyebrow-label">Load indicator</p>
+              <span
+                className={[
+                  'inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-medium ring-1',
+                  loadClasses[selectedTeam.loadTone],
+                ].join(' ')}
+              >
+                <span>●</span>
+                <span>{loadLabels[selectedTeam.loadTone]}</span>
+              </span>
+            </div>
+
+            <div className="space-y-4">
+              <div className="space-y-1.5">
+                <p className="eyebrow-label">Focus</p>
+                <p className="text-sm leading-6 text-slate-700">{selectedTeam.focus}</p>
+              </div>
+              <div className="space-y-1.5">
+                <p className="eyebrow-label">Handoff rule</p>
+                <p className="text-sm leading-6 text-slate-700">{selectedTeam.handoff}</p>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <p className="eyebrow-label">Staff roster</p>
+                <span className="text-xs font-medium uppercase tracking-[0.18em] text-slate-400">
+                  {selectedTeamStaff.length}
+                </span>
+              </div>
+
+              {selectedTeamStaff.length > 0 ? (
+                <div className="space-y-2">
+                  {selectedTeamStaff.map((member) => (
+                    <div
+                      key={member.id}
+                      className="rounded-lg border border-slate-200 px-3 py-3"
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <p className="text-sm font-medium text-slate-900">
+                          {buildStaffName(member)}
+                        </p>
+                        <span
+                          className={[
+                            'rounded-full px-2 py-0.5 text-[11px] font-medium',
+                            member.employment_status === 'active'
+                              ? 'bg-emerald-50 text-emerald-700'
+                              : 'bg-amber-50 text-amber-700',
+                          ].join(' ')}
+                        >
+                          {member.employment_status.replace(/_/g, ' ')}
+                        </span>
+                      </div>
+                      <p className="mt-1 text-sm text-slate-500">
+                        {staffRoleMap.get(member.staff_role_id ?? '') ?? 'Role not assigned'}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-slate-500">No staff members are linked to this team.</p>
+              )}
+            </div>
+
+            <div className="space-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <p className="eyebrow-label">Active operation items</p>
+                <span className="text-xs font-medium uppercase tracking-[0.18em] text-slate-400">
+                  {selectedTeamItems.length}
+                </span>
+              </div>
+
+              {selectedTeamItems.length > 0 ? (
+                <div className="space-y-2">
+                  {selectedTeamItems.map((item) => (
+                    <div
+                      key={item.id}
+                      className="rounded-lg border border-slate-200 px-3 py-3"
+                    >
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.18em] text-slate-600">
+                          {typeLabels[item.type]}
+                        </span>
+                        <span
+                          className={[
+                            'rounded-full px-2 py-0.5 text-[11px] font-medium',
+                            statusClasses[item.status],
+                          ].join(' ')}
+                        >
+                          {statusLabels[item.status]}
+                        </span>
+                        <span
+                          className={[
+                            'rounded-full px-2 py-0.5 text-[11px] font-medium',
+                            priorityClasses[item.priority],
+                          ].join(' ')}
+                        >
+                          {priorityLabels[item.priority]}
+                        </span>
+                      </div>
+                      <p className="mt-2 text-sm font-medium text-slate-900">{item.title}</p>
+                      <p className="mt-1 text-sm text-slate-500">
+                        {[item.location, formatCreatedAt(item.createdAt)].filter(Boolean).join(' - ')}
+                      </p>
+                      <p className="mt-2 text-sm text-slate-600">{item.note}</p>
+                      <div className="mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+                        <select
+                          value={item.assigneeProfileId ?? ''}
+                          onChange={(event) =>
+                            void updateTeamItemAssignee(item.id, event.target.value)
+                          }
+                          disabled={isReassigningItemId === item.id}
+                          className="field-input"
+                        >
+                          <option value="">Unassigned</option>
+                          {selectedTeamStaff.map((member) => (
+                            <option key={member.id} value={member.id}>
+                              {buildStaffName(member)}
+                            </option>
+                          ))}
+                        </select>
+                        <Link
+                          to={buildOperationsHref(item)}
+                          onClick={closeTeamDetail}
+                          className="button-secondary text-center"
+                        >
+                          Open item
+                        </Link>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-slate-500">
+                  No live coordination items are currently linked to this team.
+                </p>
+              )}
+            </div>
+
+            {drawerErrorMessage ? (
+              <p className="text-sm text-rose-600">{drawerErrorMessage}</p>
+            ) : null}
+          </div>
+        ) : null}
+      </ActionDrawer>
     </section>
   )
 }

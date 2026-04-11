@@ -1,12 +1,25 @@
 import { useEffect, useState, type FormEvent } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
+import { ActionDrawer } from '../components/ui/ActionDrawer'
 import { PageSection } from '../components/ui/PageSection'
 import { SurfaceCard } from '../components/ui/SurfaceCard'
-import { ActionDrawer } from '../components/ui/ActionDrawer'
 import { isSupabaseConfigured, supabase } from '../lib/supabase'
 
 type StaffEmploymentStatus = 'active' | 'on_leave' | 'inactive'
+type OperationItemType = 'ticket' | 'task' | 'intervention' | 'order'
+type OperationItemStatus = 'open' | 'in_progress' | 'blocked' | 'done'
+type OperationItemPriority = 'low' | 'medium' | 'high' | 'critical'
+
 interface StaffRoleRow {
   id: string
+  name: string
+}
+
+interface StaffRoleRelation {
+  name: string
+}
+
+interface TeamRelation {
   name: string
 }
 
@@ -17,7 +30,24 @@ interface StaffRecord {
   work_email: string | null
   phone: string | null
   employment_status: StaffEmploymentStatus
+  team_id: string | null
   staff_role_id: string | null
+}
+
+interface StaffDetailRecord extends StaffRecord {
+  staff_roles: StaffRoleRelation | StaffRoleRelation[] | null
+  teams: TeamRelation | TeamRelation[] | null
+}
+
+interface StaffOperationItem {
+  id: string
+  type: OperationItemType
+  title: string
+  status: OperationItemStatus
+  priority: OperationItemPriority
+  created_at: string
+  location: string | null
+  notes: string | null
 }
 
 interface DirectoryFormState {
@@ -27,18 +57,25 @@ interface DirectoryFormState {
   email: string
 }
 
-function buildStaffName(staff: StaffRecord) {
+const emptyForm: DirectoryFormState = {
+  name: '',
+  role: '',
+  phone: '',
+  email: '',
+}
+
+function buildStaffName(staff: Pick<StaffRecord, 'first_name' | 'last_name'>) {
   return `${staff.first_name} ${staff.last_name}`.trim()
 }
 
 function splitFullName(value: string) {
   const parts = value.trim().split(/\s+/).filter(Boolean)
   const firstName = parts[0] ?? ''
-  const lastName = parts.slice(1).join(' ') || firstName
+  const lastName = parts.slice(1).join(' ')
 
   return {
     firstName,
-    lastName,
+    lastName: lastName || '',
   }
 }
 
@@ -56,6 +93,73 @@ function getStaffStatusClasses(status: StaffEmploymentStatus) {
 
 function getStaffStatusLabel(status: StaffEmploymentStatus) {
   return status.replace(/_/g, ' ')
+}
+
+function getOperationStatusClasses(status: StaffOperationItem['status']) {
+  if (status === 'blocked') {
+    return 'bg-red-50 text-red-700'
+  }
+
+  if (status === 'in_progress') {
+    return 'bg-amber-50 text-amber-700'
+  }
+
+  if (status === 'done') {
+    return 'bg-emerald-50 text-emerald-700'
+  }
+
+  return 'bg-slate-100 text-slate-700'
+}
+
+function getOperationPriorityClasses(priority: StaffOperationItem['priority']) {
+  if (priority === 'critical') {
+    return 'bg-red-50 text-red-600'
+  }
+
+  if (priority === 'high') {
+    return 'bg-amber-50 text-amber-600'
+  }
+
+  return 'bg-slate-100 text-slate-600'
+}
+
+function formatCreatedAt(value: string) {
+  const date = new Date(value)
+
+  if (Number.isNaN(date.getTime())) {
+    return 'Recently'
+  }
+
+  return new Intl.DateTimeFormat('en-GB', {
+    day: '2-digit',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(date)
+}
+
+function getRoleName(role: StaffRoleRelation | StaffRoleRelation[] | null) {
+  if (Array.isArray(role)) {
+    return role[0]?.name ?? null
+  }
+
+  return role?.name ?? null
+}
+
+function getTeamName(team: TeamRelation | TeamRelation[] | null) {
+  if (Array.isArray(team)) {
+    return team[0]?.name ?? null
+  }
+
+  return team?.name ?? null
+}
+
+function buildOperationsHref(item: StaffOperationItem) {
+  const searchParams = new URLSearchParams()
+  searchParams.set('q', item.title)
+  searchParams.set('type', item.type)
+
+  return `/app/operations?${searchParams.toString()}`
 }
 
 async function getAuthenticatedContext() {
@@ -78,7 +182,7 @@ async function getAuthenticatedContext() {
     throw new Error('Sign in to access the directory.')
   }
 
-  const { data: profileRow, error: profileError } = await supabase
+  const { data: profileRow, error: profileError } = await supabase!
     .from('profiles')
     .select('organization_id')
     .eq('id', session.user.id)
@@ -94,28 +198,26 @@ async function getAuthenticatedContext() {
     throw new Error('No organization is linked to this user profile.')
   }
 
-  return { client: supabase, organizationId }
-}
-
-const emptyForm: DirectoryFormState = {
-  name: '',
-  role: '',
-  phone: '',
-  email: '',
+  return { organizationId }
 }
 
 export function Directory() {
-  if (!supabase) return null
-  const db = supabase
+  const [searchParams, setSearchParams] = useSearchParams()
   const [staff, setStaff] = useState<StaffRecord[]>([])
   const [staffRoleMap, setStaffRoleMap] = useState<Map<string, string>>(new Map())
   const [isLoading, setIsLoading] = useState(true)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
-  const [createMode, setCreateMode] = useState<boolean>(false)
+  const [createMode, setCreateMode] = useState(false)
   const [formState, setFormState] = useState<DirectoryFormState>(emptyForm)
   const [formError, setFormError] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [selectedStaffId, setSelectedStaffId] = useState<string | null>(null)
+
+  const selectedStaffId = searchParams.get('staff')
+  const roleFilterId = searchParams.get('role')
+  const visibleStaff = roleFilterId
+    ? staff.filter((member) => member.staff_role_id === roleFilterId)
+    : staff
+  const activeRoleFilter = roleFilterId ? staffRoleMap.get(roleFilterId) ?? null : null
 
   async function loadDirectory() {
     if (!isSupabaseConfigured) {
@@ -130,23 +232,29 @@ export function Directory() {
     setErrorMessage(null)
 
     try {
-      const { client } = await getAuthenticatedContext()
+      await getAuthenticatedContext()
 
       const [
         { data: staffRows, error: staffError },
         { data: roleRows, error: rolesError },
       ] = await Promise.all([
-        client
+        supabase!
           .from('staff_directory')
           .select(
-            'id, first_name, last_name, work_email, phone, employment_status, staff_role_id',
+            'id, first_name, last_name, work_email, phone, employment_status, team_id, staff_role_id',
           )
           .order('last_name', { ascending: true }),
-        client.from('staff_roles').select('id, name').order('name', { ascending: true }),
+        supabase!.from('staff_roles').select('id, name').order('name', { ascending: true }),
       ])
 
-      if (staffError) throw staffError
-      if (rolesError) throw rolesError
+      if (staffError) {
+        throw staffError
+      }
+
+      if (rolesError) {
+        throw rolesError
+      }
+
       setStaff((staffRows as StaffRecord[] | null) ?? [])
       setStaffRoleMap(
         new Map(
@@ -174,7 +282,7 @@ export function Directory() {
       return null
     }
 
-    const { data: existingRole, error: existingRoleError } = await supabase
+    const { data: existingRole, error: existingRoleError } = await supabase!
       .from('staff_roles')
       .select('id')
       .eq('organization_id', organizationId)
@@ -189,7 +297,7 @@ export function Directory() {
       return existingRole.id
     }
 
-    const { data: insertedRole, error: insertedRoleError } = await supabase
+    const { data: insertedRole, error: insertedRoleError } = await supabase!
       .from('staff_roles')
       .insert({
         organization_id: organizationId,
@@ -216,24 +324,27 @@ export function Directory() {
     setFormError(null)
 
     try {
-      const { client, organizationId } = await getAuthenticatedContext()
+      const { organizationId } = await getAuthenticatedContext()
+      const { firstName, lastName } = splitFullName(formState.name)
 
-        const { firstName, lastName } = splitFullName(formState.name)
-        const staffRoleId = await getOrCreateStaffRoleId(formState.role, organizationId)
+      if (!firstName) {
+        throw new Error('Enter a name to create a staff profile.')
+      }
 
-        const { error } = await client.from('staff_directory').insert({
-          organization_id: organizationId,
-          first_name: firstName,
-          last_name: lastName,
-          staff_role_id: staffRoleId,
-          work_email: formState.email.trim() || null,
-          phone: formState.phone.trim() || null,
-          employment_status: 'active',
-        })
+      const staffRoleId = await getOrCreateStaffRoleId(formState.role, organizationId)
+      const { error } = await supabase!.from('staff_directory').insert({
+        organization_id: organizationId,
+        first_name: firstName,
+        last_name: lastName,
+        staff_role_id: staffRoleId,
+        work_email: formState.email.trim() || null,
+        phone: formState.phone.trim() || null,
+        employment_status: 'active',
+      })
 
-        if (error) {
-          throw error
-        }
+      if (error) {
+        throw error
+      }
 
       setCreateMode(false)
       setFormState(emptyForm)
@@ -248,6 +359,28 @@ export function Directory() {
     }
   }
 
+  function openStaffDetail(staffId: string) {
+    const nextParams = new URLSearchParams(searchParams)
+    nextParams.set('staff', staffId)
+    setSearchParams(nextParams)
+  }
+
+  function clearRoleFilter() {
+    if (!roleFilterId) {
+      return
+    }
+
+    const nextParams = new URLSearchParams(searchParams)
+    nextParams.delete('role')
+    setSearchParams(nextParams)
+  }
+
+  function closeStaffDetail() {
+    const nextParams = new URLSearchParams(searchParams)
+    nextParams.delete('staff')
+    setSearchParams(nextParams)
+  }
+
   return (
     <PageSection
       title="Directory"
@@ -257,49 +390,95 @@ export function Directory() {
         title="Staff"
         description="Manage the internal team involved in daily operations."
       >
-        <div className="flex justify-end">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p className="text-sm text-slate-500">
+            {isLoading
+              ? 'Loading staff...'
+              : `${visibleStaff.length} staff profile${visibleStaff.length === 1 ? '' : 's'}`}
+          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            {activeRoleFilter ? (
               <button
-            type="button"
-            onClick={() => {
-              setCreateMode(true)
-              setFormError(null)
-                      setFormState(emptyForm)
-                    }}
-            className="button-primary"
-                  >
-            New staff member
-                  </button>
-                </div>
-
-        <div className="mt-6 divide-y divide-slate-100">
-          {!isLoading && !errorMessage ? (
-            staff.map((member) => (
-              <button
-                key={member.id}
                 type="button"
-                onClick={() => setSelectedStaffId(member.id)}
-                className="grid w-full gap-3 rounded-2xl px-3 py-4 text-left transition-all hover:bg-slate-50 md:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_auto] md:items-center"
+                onClick={clearRoleFilter}
+                className="button-secondary"
               >
-                <div className="space-y-1">
-                  <p className="text-sm font-semibold text-slate-950">{buildStaffName(member)}</p>
-                  <p className="text-sm text-slate-600">
-                    {staffRoleMap.get(member.staff_role_id ?? '') ?? 'Role not assigned'}
-                  </p>
-        </div>
-                <div className="text-sm text-slate-500">{member.work_email}</div>
-                <span className={['rounded-full border px-2.5 py-1 text-xs font-semibold', getStaffStatusClasses(member.employment_status)].join(' ')}>
-                  {getStaffStatusLabel(member.employment_status)}
-                </span>
+                Clear role: {activeRoleFilter}
               </button>
-            ))
+            ) : null}
+            <button
+              type="button"
+              onClick={() => {
+                setCreateMode(true)
+                setFormError(null)
+                setFormState(emptyForm)
+              }}
+              className="button-primary"
+            >
+              New staff member
+            </button>
+          </div>
+        </div>
+
+        <div className="mt-6">
+          {isLoading ? (
+            <p className="text-sm leading-7 text-slate-600">Loading directory...</p>
+          ) : null}
+
+          {!isLoading && errorMessage ? (
+            <p className="text-sm leading-7 text-slate-600">{errorMessage}</p>
+          ) : null}
+
+          {!isLoading && !errorMessage && visibleStaff.length === 0 ? (
+            <p className="text-sm leading-7 text-slate-600">
+              {activeRoleFilter
+                ? 'No staff profiles match this role yet.'
+                : 'No staff profiles are available yet.'}
+            </p>
+          ) : null}
+
+          {!isLoading && !errorMessage && visibleStaff.length > 0 ? (
+            <div className="divide-y divide-slate-100">
+              {visibleStaff.map((member) => {
+                const roleName =
+                  staffRoleMap.get(member.staff_role_id ?? '') ?? 'Role not assigned'
+
+                return (
+                  <button
+                    key={member.id}
+                    type="button"
+                    onClick={() => openStaffDetail(member.id)}
+                    className="grid w-full gap-3 rounded-lg px-3 py-4 text-left transition-all hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300 md:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,1fr)_auto] md:items-center"
+                  >
+                    <div className="space-y-1">
+                      <p className="text-sm font-semibold text-slate-950">
+                        {buildStaffName(member)}
+                      </p>
+                      <p className="text-sm text-slate-600">{roleName}</p>
+                    </div>
+                    <div className="text-sm text-slate-500">
+                      {member.work_email ?? 'No email provided'}
+                    </div>
+                    <div className="text-sm text-slate-500">
+                      {member.phone ?? 'No phone provided'}
+                    </div>
+                    <span
+                      className={[
+                        'justify-self-start rounded-full border px-2.5 py-1 text-xs font-semibold capitalize md:justify-self-end',
+                        getStaffStatusClasses(member.employment_status),
+                      ].join(' ')}
+                    >
+                      {getStaffStatusLabel(member.employment_status)}
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
           ) : null}
         </div>
       </SurfaceCard>
 
-      <StaffDetailDrawer
-        staffId={selectedStaffId}
-        onClose={() => setSelectedStaffId(null)}
-      />
+      <StaffDetailDrawer staffId={selectedStaffId} onClose={closeStaffDetail} />
 
       {createMode ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/20 px-5">
@@ -359,9 +538,7 @@ export function Directory() {
                   />
                 </label>
 
-                {formError ? (
-                  <p className="text-sm text-rose-600">{formError}</p>
-                ) : null}
+                {formError ? <p className="text-sm text-rose-600">{formError}</p> : null}
 
                 <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
                   <button
@@ -392,54 +569,219 @@ export function Directory() {
   )
 }
 
-function StaffDetailDrawer({ staffId, onClose }: { staffId: string | null; onClose: () => void }) {
-  const [details, setDetails] = useState<any>(null)
-  const [activeItems, setActiveItems] = useState<any[]>([])
+function StaffDetailDrawer({
+  staffId,
+  onClose,
+}: {
+  staffId: string | null
+  onClose: () => void
+}) {
+  const [details, setDetails] = useState<StaffDetailRecord | null>(null)
+  const [activeItems, setActiveItems] = useState<StaffOperationItem[]>([])
+  const [isLoading, setIsLoading] = useState(false)
+  const [errorMessage, setErrorMessage] = useState<string | null>(null)
 
   useEffect(() => {
-    if (staffId && supabase) {
-      const db = supabase
-      db
-        .from('staff_directory')
-        .select('*, staff_roles(name)')
-        .eq('id', staffId)
-        .single()
-        .then(({ data }) => setDetails(data))
+    let isCancelled = false
 
-      db
-        .from('operation_items')
-        .select('*')
-        .eq('created_by_profile_id', staffId)
-        .eq('status', 'open')
-        .then(({ data }) => setActiveItems(data ?? []))
+    async function loadStaffDetail(selectedStaffId: string) {
+      if (!supabase) {
+        if (!isCancelled) {
+          setErrorMessage('Live staff details are unavailable right now.')
+          setIsLoading(false)
+        }
+        return
+      }
+
+      setIsLoading(true)
+      setErrorMessage(null)
+
+      try {
+        const [
+          { data: staffRecord, error: staffError },
+          { data: operationRows, error: operationsError },
+        ] = await Promise.all([
+          supabase!
+            .from('staff_directory')
+            .select(
+              'id, first_name, last_name, work_email, phone, employment_status, team_id, staff_role_id, staff_roles(name), teams(name)',
+            )
+            .eq('id', selectedStaffId)
+            .maybeSingle(),
+          supabase!
+            .from('operation_items')
+            .select('id, type, title, status, priority, created_at, location, notes')
+            .eq('created_by_profile_id', selectedStaffId)
+            .in('status', ['open', 'in_progress', 'blocked'])
+            .order('created_at', { ascending: false }),
+        ])
+
+        if (staffError) {
+          throw staffError
+        }
+
+        if (operationsError) {
+          throw operationsError
+        }
+
+        if (!isCancelled) {
+          setDetails((staffRecord as StaffDetailRecord | null) ?? null)
+          setActiveItems((operationRows as StaffOperationItem[] | null) ?? [])
+        }
+      } catch (error) {
+        console.error('Unable to load staff detail', error)
+
+        if (!isCancelled) {
+          setErrorMessage(
+            error instanceof Error ? error.message : 'Unable to load this staff profile.',
+          )
+        }
+      } finally {
+        if (!isCancelled) {
+          setIsLoading(false)
+        }
+      }
+    }
+
+    if (!staffId) {
+      setDetails(null)
+      setActiveItems([])
+      setErrorMessage(null)
+      setIsLoading(false)
+      return
+    }
+
+    void loadStaffDetail(staffId)
+
+    return () => {
+      isCancelled = true
     }
   }, [staffId])
 
+  const title = details ? buildStaffName(details) : 'Staff profile'
+  const roleName = getRoleName(details?.staff_roles ?? null)
+  const teamName = getTeamName(details?.teams ?? null)
+
   return (
-    <ActionDrawer isOpen={!!staffId} onClose={onClose} title="Staff Profile">
-      {details ? (
+    <ActionDrawer isOpen={Boolean(staffId)} onClose={onClose} title={title}>
+      {isLoading ? <p className="text-sm text-slate-600">Loading staff profile...</p> : null}
+
+      {!isLoading && errorMessage ? (
+        <p className="text-sm text-slate-600">{errorMessage}</p>
+      ) : null}
+
+      {!isLoading && !errorMessage && !details ? (
+        <p className="text-sm text-slate-600">This staff profile is unavailable.</p>
+      ) : null}
+
+      {!isLoading && !errorMessage && details ? (
         <div className="space-y-6">
-          <div>
-            <p className="eyebrow-label">Contact</p>
-            <p className="text-sm font-medium">{details.first_name} {details.last_name}</p>
-            <p className="text-sm text-slate-500">{details.work_email}</p>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-1">
+              <p className="eyebrow-label">Role</p>
+              <p className="text-sm font-medium text-slate-900">
+                {roleName ?? 'Role not assigned'}
+              </p>
+            </div>
+            <div className="space-y-1">
+              <p className="eyebrow-label">Availability</p>
+              <span
+                className={[
+                  'inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold capitalize',
+                  getStaffStatusClasses(details.employment_status),
+                ].join(' ')}
+              >
+                {getStaffStatusLabel(details.employment_status)}
+              </span>
+            </div>
+            <div className="space-y-1">
+              <p className="eyebrow-label">Team</p>
+              <p className="text-sm font-medium text-slate-900">
+                {teamName ?? 'No team assigned'}
+              </p>
+            </div>
+            <div className="space-y-1">
+              <p className="eyebrow-label">Email</p>
+              {details.work_email ? (
+                <a
+                  href={`mailto:${details.work_email}`}
+                  className="text-sm font-medium text-slate-900 hover:text-slate-700"
+                >
+                  {details.work_email}
+                </a>
+              ) : (
+                <p className="text-sm text-slate-500">No email provided</p>
+              )}
+            </div>
+            <div className="space-y-1">
+              <p className="eyebrow-label">Phone</p>
+              {details.phone ? (
+                <a
+                  href={`tel:${details.phone}`}
+                  className="text-sm font-medium text-slate-900 hover:text-slate-700"
+                >
+                  {details.phone}
+                </a>
+              ) : (
+                <p className="text-sm text-slate-500">No phone provided</p>
+              )}
+            </div>
           </div>
-          <div>
-            <p className="eyebrow-label">Active Operational Items</p>
+
+          <div className="space-y-3">
+            <div className="flex items-center justify-between gap-3">
+              <p className="eyebrow-label">Active operational items</p>
+              <span className="text-xs font-medium uppercase tracking-[0.18em] text-slate-400">
+                {activeItems.length}
+              </span>
+            </div>
+
             {activeItems.length > 0 ? (
-              <ul className="mt-2 space-y-2">
+              <div className="space-y-2">
                 {activeItems.map((item) => (
-                  <li key={item.id} className="text-sm border-l-2 border-slate-200 pl-3 py-1 text-slate-700">
-                    {item.title}
-                  </li>
+                  <Link
+                    key={item.id}
+                    to={buildOperationsHref(item)}
+                    onClick={onClose}
+                    className="block rounded-lg border border-slate-200 px-3 py-3 transition-colors hover:bg-slate-50"
+                  >
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.18em] text-slate-600">
+                        {item.type}
+                      </span>
+                      <span
+                        className={[
+                          'rounded-full px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.18em]',
+                          getOperationStatusClasses(item.status),
+                        ].join(' ')}
+                      >
+                        {item.status.replace(/_/g, ' ')}
+                      </span>
+                      <span
+                        className={[
+                          'rounded-full px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.18em]',
+                          getOperationPriorityClasses(item.priority),
+                        ].join(' ')}
+                      >
+                        {item.priority}
+                      </span>
+                    </div>
+                    <p className="mt-2 text-sm font-medium text-slate-900">{item.title}</p>
+                    <p className="mt-1 text-sm text-slate-500">
+                      {[item.location, formatCreatedAt(item.created_at)].filter(Boolean).join(' - ')}
+                    </p>
+                    {item.notes ? (
+                      <p className="mt-2 text-sm text-slate-600">{item.notes}</p>
+                    ) : null}
+                  </Link>
                 ))}
-              </ul>
-            ) : <p className="text-sm text-slate-500 mt-2 italic">No active items.</p>}
+              </div>
+            ) : (
+              <p className="text-sm italic text-slate-500">No active items.</p>
+            )}
           </div>
         </div>
-      ) : <p className="text-sm">Loading...</p>}
+      ) : null}
     </ActionDrawer>
   )
 }
-
- 

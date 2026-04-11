@@ -365,19 +365,16 @@ async function getKpis(): Promise<DirectorKpis> {
     { data: pendingExpenseRows, error: pendingSpendError },
     { count: guestImpactCount, error: guestImpactError },
   ] = await Promise.all([
-    supabase
-      .from('maintenance_tickets')
+    supabase!.from('maintenance_tickets')
       .select('id, status, priority, due_at')
       .neq('status', 'resolved')
       .neq('status', 'closed'),
-    supabase
-      .from('maintenance_tickets')
+    supabase!.from('maintenance_tickets')
       .select('id', { count: 'exact', head: true })
       .in('status', ['resolved', 'closed']),
-    supabase.from('maintenance_tickets').select('id', { count: 'exact', head: true }),
-    supabase.from('cash_expenses').select('amount').eq('status', 'submitted'),
-    supabase
-      .from('reviews')
+    supabase!.from('maintenance_tickets').select('id', { count: 'exact', head: true }),
+    supabase!.from('cash_expenses').select('amount').eq('status', 'submitted'),
+    supabase!.from('reviews')
       .select('id', { count: 'exact', head: true })
       .lte('rating', 3),
   ])
@@ -615,23 +612,19 @@ async function getDashboardData(): Promise<DashboardData> {
     { data: reviewRows, error: reviewError },
     { data: operationRows, error: operationError },
   ] = await Promise.all([
-    supabase
-      .from('maintenance_tickets')
+    supabase!.from('maintenance_tickets')
       .select('id, title, location, status, priority, reported_at, due_at')
       .order('reported_at', { ascending: false })
       .limit(18),
-    supabase
-      .from('cash_expenses')
+    supabase!.from('cash_expenses')
       .select('id, description, amount, status, created_at')
       .order('created_at', { ascending: false })
       .limit(18),
-    supabase
-      .from('reviews')
+    supabase!.from('reviews')
       .select('id, title, body, rating, reviewed_at, response_status')
       .order('reviewed_at', { ascending: false })
       .limit(18),
-    supabase
-      .from('operation_items')
+    supabase!.from('operation_items')
       .select('id, type, title, status, priority, created_at, location, notes')
       .order('created_at', { ascending: false })
       .limit(18),
@@ -882,10 +875,10 @@ export function Dashboard() {
 
   const kpiCards = [
     {
-      label: 'Critical Issues',
+      label: 'Blocked Rooms',
       value: String(kpis.criticalIssues),
       helper: 'Blocking rooms and access',
-      href: buildHref('/app/maintenance', { priority: 'critical' }),
+      href: buildHref('/app/maintenance', { priority: 'critical', status: 'open' }),
     },
     {
       label: 'Resolution Rate',
@@ -903,7 +896,7 @@ export function Dashboard() {
       label: 'Guest Impact',
       value: String(kpis.guestImpact),
       helper: 'Negative reviews to follow up',
-      href: buildHref('/app/reputation', { filter: 'negative' }),
+      href: buildHref('/app/reputation', { rating: 'low' }),
     },
   ]
 
@@ -976,7 +969,7 @@ export function Dashboard() {
             </SurfaceCard>
 
             <SurfaceCard
-              title="Requires attention"
+              title="Urgent Actions"
               description="Unified list across maintenance, spend, and execution."
             >
               {isLoading ? (
@@ -1025,4 +1018,3 @@ export function Dashboard() {
     </PageSection>
   )
 }
-
