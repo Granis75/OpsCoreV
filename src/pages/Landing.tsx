@@ -1,38 +1,47 @@
 import { Link } from 'react-router-dom'
-import { SurfaceCard } from '../components/ui/SurfaceCard'
 
-const principles = [
-  'One workspace for incidents, vendors, spend, and guest impact.',
-  'Clear ownership on every open issue.',
-  'See what matters, then act.',
+const kpis = [
+  { label: 'Blocked rooms', value: '2' },
+  { label: 'Pending approvals', value: '3' },
+  { label: 'Vendor escalations', value: '1' },
+  { label: 'Guest response due', value: '1' },
 ]
 
-const snapshot = [
+const openNowItems = [
   {
-    label: 'Blocked rooms',
-    value: '2',
-    detail: 'Room 214 HVAC and Room 402 lock access still unresolved.',
+    title: 'Room 214 HVAC still blocked',
+    detail: 'Engineering follow-up pending since 17:40',
     tone: 'critical',
   },
   {
-    label: 'Pending approvals',
-    value: '3',
-    detail: 'Submitted expenses awaiting decision before close.',
-    tone: 'warning',
-  },
-  {
-    label: 'Vendor escalations',
-    value: '1',
-    detail: 'Laundry supplier SLA breach flagged for follow-up.',
-    tone: 'warning',
-  },
-  {
-    label: 'Guest response due',
-    value: '1',
-    detail: 'Negative review awaiting manager response.',
+    title: 'Room 402 lock access unresolved',
+    detail: 'Guest relocation completed, permanent fix pending',
     tone: 'critical',
+  },
+  {
+    title: 'Laundry vendor escalation open',
+    detail: 'SLA breach requires callback confirmation',
+    tone: 'warning',
   },
 ] as const
+
+const recentActivityItems = [
+  {
+    title: 'Expense approval queue updated',
+    detail: '3 submitted items awaiting final decision',
+    time: '19:17',
+  },
+  {
+    title: 'Negative review flagged for response',
+    detail: 'Manager response due on current shift',
+    time: '18:54',
+  },
+  {
+    title: 'Blocked room reassigned to engineering',
+    detail: 'Priority confirmed as critical',
+    time: '18:32',
+  },
+]
 
 function getToneClass(tone: 'critical' | 'warning') {
   if (tone === 'critical') {
@@ -44,14 +53,11 @@ function getToneClass(tone: 'critical' | 'warning') {
 
 export function Landing() {
   return (
-    <div className="min-h-screen bg-transparent px-5 py-6 md:px-8 md:py-8">
-      <div className="mx-auto flex w-full max-w-6xl flex-col gap-8">
+    <div className="min-h-screen bg-slate-50/60 px-5 py-6 md:px-8 md:py-8">
+      <div className="mx-auto w-full max-w-7xl">
         <header className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="inline-flex h-10 w-10 items-center justify-center rounded-lg bg-slate-950 text-sm font-semibold text-white">
-              OC
-            </div>
-            <span className="text-sm font-semibold text-slate-900">Ops Core</span>
+          <div className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-slate-950 text-sm font-semibold text-white">
+            OC
           </div>
 
           <div className="flex items-center gap-4">
@@ -64,97 +70,107 @@ export function Landing() {
           </div>
         </header>
 
-        <section className="space-y-5">
-          <h1 className="max-w-4xl text-4xl font-semibold tracking-tight text-slate-950 md:text-5xl">
-            Structured operations for teams under pressure.
-          </h1>
-          <p className="max-w-3xl text-base leading-7 text-slate-600 md:text-lg">
-            Track incidents, spend, vendors, and guest impact in one workspace.
-          </p>
-          <div className="space-y-2">
+        <main className="mt-10 space-y-8 md:mt-14">
+          <section className="max-w-3xl space-y-5">
+            <h1 className="text-4xl font-semibold tracking-tight text-slate-950 md:text-6xl">
+              Operations don’t break.
+              <br />
+              They drift.
+              <br />
+              <br />
+              This keeps them under control.
+            </h1>
+
+            <p className="max-w-2xl text-base leading-7 text-slate-600 md:text-lg">
+              Track incidents, spend, vendors, and guest impact in one operational workspace.
+            </p>
+
             <Link to="/sign-up" className="button-primary inline-flex px-5 py-3">
               Create account
             </Link>
-            <p className="text-sm text-slate-500">
-              Setup takes minutes. Your team can start acting today.
-            </p>
-          </div>
-        </section>
+          </section>
 
-        <SurfaceCard
-          title="Operational Snapshot"
-          description="A real-time view of pressure points and actions."
-          className="border-slate-200 bg-white"
-        >
-          <div className="space-y-6">
-            <div className="grid gap-3 md:grid-cols-4">
-              {snapshot.map((item) => (
-                <div key={item.label} className="rounded-lg border border-slate-200 px-4 py-3">
-                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-                    {item.label}
+          <section className="rounded-[24px] border border-slate-200 bg-white p-6 shadow-sm md:p-8">
+            <div className="space-y-1">
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                Product preview
+              </p>
+              <h2 className="text-2xl font-semibold tracking-tight text-slate-950">
+                Operational snapshot
+              </h2>
+            </div>
+
+            <div className="mt-6 grid gap-3 md:grid-cols-4">
+              {kpis.map((kpi) => (
+                <div key={kpi.label} className="rounded-2xl border border-slate-200 px-4 py-3">
+                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
+                    {kpi.label}
                   </p>
-                  <p className="mt-1 text-2xl font-semibold tracking-tight text-slate-950">
-                    {item.value}
+                  <p className="mt-1 text-3xl font-semibold tracking-tight text-slate-950">
+                    {kpi.value}
                   </p>
                 </div>
               ))}
             </div>
 
-            <div className="grid gap-6 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]">
+            <div className="mt-8 grid gap-6 lg:grid-cols-2">
               <div className="space-y-3">
                 <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
                   Open now
                 </p>
                 <div className="space-y-2">
-                  {snapshot.map((item) => (
-                    <div
-                      key={`${item.label}-detail`}
-                      className="flex items-start justify-between gap-3 rounded-lg border border-slate-200 px-3 py-3"
+                  {openNowItems.map((item) => (
+                    <Link
+                      key={item.title}
+                      to="/app"
+                      className="block cursor-pointer rounded-2xl border border-slate-200 px-4 py-3 transition duration-150 hover:-translate-y-0.5 hover:shadow-sm"
                     >
-                      <p className="text-sm text-slate-700">{item.detail}</p>
-                      <span
-                        className={[
-                          'inline-flex rounded-full px-2 py-0.5 text-xs font-semibold',
-                          getToneClass(item.tone),
-                        ].join(' ')}
-                      >
-                        {item.value}
-                      </span>
-                    </div>
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-medium text-slate-900">{item.title}</p>
+                          <p className="mt-1 text-sm text-slate-600">{item.detail}</p>
+                        </div>
+                        <span
+                          className={[
+                            'inline-flex rounded-full px-2 py-0.5 text-xs font-semibold',
+                            getToneClass(item.tone),
+                          ].join(' ')}
+                        >
+                          Open
+                        </span>
+                      </div>
+                    </Link>
                   ))}
                 </div>
               </div>
 
               <div className="space-y-3">
                 <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-                  Recent action
+                  Recent activity
                 </p>
-                <div className="rounded-lg border border-slate-200 px-4 py-3">
-                  <p className="text-sm font-medium text-slate-900">
-                    19:42 · Room 214 recovery assigned to Engineering
-                  </p>
-                  <p className="mt-1 text-sm text-slate-600">
-                    Priority set to critical. Vendor follow-up requested.
-                  </p>
-                </div>
-                <div className="rounded-lg border border-slate-200 px-4 py-3">
-                  <p className="text-sm font-medium text-slate-900">
-                    19:17 · Expense approval queue updated
-                  </p>
-                  <p className="mt-1 text-sm text-slate-600">
-                    Three submitted items now pending final decision.
-                  </p>
+                <div className="space-y-2">
+                  {recentActivityItems.map((item) => (
+                    <Link
+                      key={item.title}
+                      to="/app"
+                      className="block cursor-pointer rounded-2xl border border-slate-200 px-4 py-3 transition duration-150 hover:-translate-y-0.5 hover:shadow-sm"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-medium text-slate-900">{item.title}</p>
+                          <p className="mt-1 text-sm text-slate-600">{item.detail}</p>
+                        </div>
+                        <span className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">
+                          {item.time}
+                        </span>
+                      </div>
+                    </Link>
+                  ))}
                 </div>
               </div>
             </div>
-          </div>
-        </SurfaceCard>
-
-        <section className="grid gap-2 border-t border-slate-200 pt-4 text-sm text-slate-600 md:grid-cols-3">
-          {principles.map((principle) => (
-            <p key={principle}>{principle}</p>
-          ))}
-        </section>
+          </section>
+        </main>
       </div>
     </div>
   )
