@@ -1,215 +1,160 @@
-import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { SurfaceCard } from '../components/ui/SurfaceCard'
 
-const heroCards = [
-  {
-    label: 'Capture',
-    title: 'Turn daily noise into a readable operating baseline.',
-    description:
-      'Maintenance, spend, vendors and guest issues stay visible in one system instead of drifting across inboxes and spreadsheets.',
-  },
-  {
-    label: 'Coordination',
-    title: 'Keep ownership clear while work is still moving.',
-    description:
-      'The workspace keeps open loops, dependencies and follow-ups visible before they become escalation threads.',
-  },
-  {
-    label: 'Visibility',
-    title: 'See operational pressure without adding reporting work.',
-    description:
-      'Teams get a clean read on workload, risks and response timing without building another layer of manual updates.',
-  },
+const principles = [
+  'One workspace for incidents, vendors, spend, and guest impact.',
+  'Clear ownership on every open issue.',
+  'See what matters, then act.',
 ]
 
-const supportingCards = [
+const snapshot = [
   {
-    label: 'Workspace',
-    title: 'A control surface designed for daily execution.',
-    description:
-      'Open work, review cycles and guest-impacting signals stay close enough to act on in minutes.',
-  },
-  {
-    label: 'System',
-    title: 'Structured operations replace scattered follow-up.',
-    description:
-      'The product is shaped around clarity, ownership and repeatable routines rather than extra process.',
-  },
-]
-
-const signals = [
-  {
-    category: 'Maintenance',
-    message: 'One room recovery ticket is overdue and still waiting on engineering confirmation.',
-    status: 'Warning',
-    tone: 'warning',
-  },
-  {
-    category: 'Expenses',
-    message: 'Two approvals are sitting in review and need a final decision before close.',
-    status: 'Warning',
-    tone: 'warning',
-  },
-  {
-    category: 'Reputation',
-    message: 'A negative guest review is still open and should be answered today.',
-    status: 'Critical',
+    label: 'Blocked rooms',
+    value: '2',
+    detail: 'Room 214 HVAC and Room 402 lock access still unresolved.',
     tone: 'critical',
   },
   {
-    category: 'Vendors',
-    message: 'Partner follow-up is on track with no blocked escalation at the moment.',
-    status: 'Normal',
-    tone: 'normal',
+    label: 'Pending approvals',
+    value: '3',
+    detail: 'Submitted expenses awaiting decision before close.',
+    tone: 'warning',
+  },
+  {
+    label: 'Vendor escalations',
+    value: '1',
+    detail: 'Laundry supplier SLA breach flagged for follow-up.',
+    tone: 'warning',
+  },
+  {
+    label: 'Guest response due',
+    value: '1',
+    detail: 'Negative review awaiting manager response.',
+    tone: 'critical',
   },
 ] as const
 
-function LandingCard({
-  children,
-  className = '',
-}: {
-  children: ReactNode
-  className?: string
-}) {
-  return (
-    <SurfaceCard
-      title=""
-      description=""
-      className={[
-        'rounded-2xl border-slate-100 bg-white p-8 shadow-sm backdrop-blur-none',
-        '[&>div:first-child]:hidden [&>div:last-child]:mt-0',
-        className,
-      ]
-        .filter(Boolean)
-        .join(' ')}
-    >
-      {children}
-    </SurfaceCard>
-  )
-}
+function getToneClass(tone: 'critical' | 'warning') {
+  if (tone === 'critical') {
+    return 'bg-red-50 text-red-700'
+  }
 
-function LandingLabel({ children }: { children: ReactNode }) {
-  return (
-    <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">
-      {children}
-    </p>
-  )
+  return 'bg-amber-50 text-amber-700'
 }
 
 export function Landing() {
   return (
-    <div className="min-h-screen bg-transparent px-5 py-8 md:px-8 md:py-10">
-      <div className="mx-auto max-w-7xl space-y-8">
-        <div className="flex items-center justify-between gap-6">
-          <div className="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-950 text-sm font-semibold text-white shadow-sm">
-            OC
+    <div className="min-h-screen bg-transparent px-5 py-6 md:px-8 md:py-8">
+      <div className="mx-auto flex w-full max-w-6xl flex-col gap-8">
+        <header className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="inline-flex h-10 w-10 items-center justify-center rounded-lg bg-slate-950 text-sm font-semibold text-white">
+              OC
+            </div>
+            <span className="text-sm font-semibold text-slate-900">Ops Core</span>
           </div>
 
-          <div className="flex items-center gap-3">
-            <Link
-              to="/sign-in"
-              className="button-secondary px-4 py-2.5"
-            >
+          <div className="flex items-center gap-4">
+            <Link to="/sign-in" className="text-sm font-medium text-slate-600 hover:text-slate-900">
               Sign in
             </Link>
-            <Link
-              to="/sign-up"
-              className="button-primary px-4 py-2.5"
-            >
+            <Link to="/sign-up" className="button-primary px-4 py-2.5">
               Create account
             </Link>
           </div>
-        </div>
+        </header>
 
-        <div className="grid gap-8 xl:grid-cols-[minmax(0,1.38fr)_minmax(0,0.62fr)]">
-          <LandingCard className="h-full">
-            <LandingLabel>Ops Core V12</LandingLabel>
-            <h1 className="mt-6 text-4xl font-bold tracking-tighter text-black md:text-5xl">
-              I turn fragmented operations into structured systems.
-            </h1>
-            <p className="mt-6 max-w-xl text-base leading-relaxed text-slate-500">
-              From manual workflows (Excel, calls, scattered tools) to clear,
-              reliable and trackable operations.
+        <section className="space-y-5">
+          <h1 className="max-w-4xl text-4xl font-semibold tracking-tight text-slate-950 md:text-5xl">
+            Structured operations for teams under pressure.
+          </h1>
+          <p className="max-w-3xl text-base leading-7 text-slate-600 md:text-lg">
+            Track incidents, spend, vendors, and guest impact in one workspace.
+          </p>
+          <div className="space-y-2">
+            <Link to="/sign-up" className="button-primary inline-flex px-5 py-3">
+              Create account
+            </Link>
+            <p className="text-sm text-slate-500">
+              Setup takes minutes. Your team can start acting today.
             </p>
+          </div>
+        </section>
 
-            <div className="mt-8 flex flex-wrap gap-3">
-              <Link
-                to="/sign-in"
-                className="button-primary px-5"
-              >
-                View work
-              </Link>
-              <a
-                href="mailto:contact@ops-core.app"
-                className="button-secondary px-5"
-              >
-                Contact
-              </a>
-            </div>
-          </LandingCard>
-
-          <LandingCard className="h-full">
-            <LandingLabel>Today Signals</LandingLabel>
-            <div className="mt-6 space-y-3">
-              {signals.map((signal) => (
-                <div
-                  key={signal.category}
-                  className="flex items-center gap-4 rounded-2xl border border-slate-100 px-4 py-4"
-                >
-                  <span className="w-24 text-[10px] font-semibold uppercase tracking-widest text-slate-400">
-                    {signal.category}
-                  </span>
-
-                  <span className="flex-1 text-sm leading-relaxed text-slate-600">
-                    {signal.message}
-                  </span>
-
-                  <span
-                    className={[
-                      'rounded-full px-2 py-1 text-xs font-medium',
-                      signal.tone === 'critical'
-                        ? 'bg-red-500/10 text-red-600'
-                        : signal.tone === 'warning'
-                          ? 'bg-amber-500/10 text-amber-600'
-                          : 'bg-slate-200/50 text-slate-600',
-                    ].join(' ')}
-                  >
-                    {signal.status}
-                  </span>
+        <SurfaceCard
+          title="Operational Snapshot"
+          description="A real-time view of pressure points and actions."
+          className="border-slate-200 bg-white"
+        >
+          <div className="space-y-6">
+            <div className="grid gap-3 md:grid-cols-4">
+              {snapshot.map((item) => (
+                <div key={item.label} className="rounded-lg border border-slate-200 px-4 py-3">
+                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+                    {item.label}
+                  </p>
+                  <p className="mt-1 text-2xl font-semibold tracking-tight text-slate-950">
+                    {item.value}
+                  </p>
                 </div>
               ))}
             </div>
-          </LandingCard>
-        </div>
 
-        <div className="grid gap-6 md:grid-cols-3">
-          {heroCards.map((card) => (
-            <LandingCard key={card.title} className="h-full">
-              <LandingLabel>{card.label}</LandingLabel>
-              <h2 className="mt-4 text-xl font-semibold tracking-tight text-slate-950">
-                {card.title}
-              </h2>
-              <p className="mt-4 text-sm leading-relaxed text-slate-500">
-                {card.description}
-              </p>
-            </LandingCard>
-          ))}
-        </div>
+            <div className="grid gap-6 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]">
+              <div className="space-y-3">
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+                  Open now
+                </p>
+                <div className="space-y-2">
+                  {snapshot.map((item) => (
+                    <div
+                      key={`${item.label}-detail`}
+                      className="flex items-start justify-between gap-3 rounded-lg border border-slate-200 px-3 py-3"
+                    >
+                      <p className="text-sm text-slate-700">{item.detail}</p>
+                      <span
+                        className={[
+                          'inline-flex rounded-full px-2 py-0.5 text-xs font-semibold',
+                          getToneClass(item.tone),
+                        ].join(' ')}
+                      >
+                        {item.value}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
 
-        <div className="grid gap-6 xl:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)]">
-          {supportingCards.map((card) => (
-            <LandingCard key={card.title} className="h-full">
-              <LandingLabel>{card.label}</LandingLabel>
-              <h2 className="mt-4 text-2xl font-semibold tracking-tight text-slate-950">
-                {card.title}
-              </h2>
-              <p className="mt-4 text-base leading-relaxed text-slate-500">
-                {card.description}
-              </p>
-            </LandingCard>
+              <div className="space-y-3">
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+                  Recent action
+                </p>
+                <div className="rounded-lg border border-slate-200 px-4 py-3">
+                  <p className="text-sm font-medium text-slate-900">
+                    19:42 · Room 214 recovery assigned to Engineering
+                  </p>
+                  <p className="mt-1 text-sm text-slate-600">
+                    Priority set to critical. Vendor follow-up requested.
+                  </p>
+                </div>
+                <div className="rounded-lg border border-slate-200 px-4 py-3">
+                  <p className="text-sm font-medium text-slate-900">
+                    19:17 · Expense approval queue updated
+                  </p>
+                  <p className="mt-1 text-sm text-slate-600">
+                    Three submitted items now pending final decision.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </SurfaceCard>
+
+        <section className="grid gap-2 border-t border-slate-200 pt-4 text-sm text-slate-600 md:grid-cols-3">
+          {principles.map((principle) => (
+            <p key={principle}>{principle}</p>
           ))}
-        </div>
+        </section>
       </div>
     </div>
   )
