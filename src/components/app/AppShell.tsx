@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import type { Session } from '@supabase/supabase-js'
-import { LogOut } from 'lucide-react'
+import { LogOut, ShieldCheck } from 'lucide-react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { navigationItems } from '../../data/navigation'
 import { supabase } from '../../lib/supabase'
@@ -74,20 +74,23 @@ export function AppShell({ session }: AppShellProps) {
   return (
     <div className="min-h-screen">
       <div className="mx-auto flex min-h-screen max-w-[1600px]">
-        <aside className="hidden w-72 shrink-0 border-r border-slate-200/70 bg-white/72 px-6 py-5 backdrop-blur-xl xl:flex xl:flex-col">
+        <aside className="hidden w-72 shrink-0 flex-col border-r border-slate-200/70 bg-white/72 px-6 py-5 backdrop-blur-xl xl:flex">
           <div className="mb-8 space-y-4">
-            <div className="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-950 text-sm font-semibold text-white shadow-sm">
-              OC
+            <div className="flex items-center gap-3">
+              <div className="inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-slate-950 text-sm font-semibold text-white shadow-sm">
+                OC
+              </div>
+              <div>
+                <p className="text-sm font-semibold leading-tight text-slate-950">Ops Core</p>
+                <p className="text-[11px] leading-tight text-slate-400">Internal Platform</p>
+              </div>
             </div>
             <div className="space-y-1">
-              <p className="eyebrow-label">
-                Ops Core V12
-              </p>
-              <p className="text-xl font-semibold tracking-tight text-slate-950">
+              <p className="text-base font-semibold tracking-tight text-slate-950">
                 Operational workspace
               </p>
               <p className="text-sm leading-6 text-slate-500">
-                Shared control surface for incidents, vendors, spend, and guest quality.
+                Incidents, vendors, spend, and guest quality in one control surface.
               </p>
             </div>
           </div>
@@ -112,6 +115,13 @@ export function AppShell({ session }: AppShellProps) {
               </NavLink>
             ))}
           </nav>
+
+          <div className="mt-6 flex items-center gap-2 rounded-2xl border border-slate-200/80 bg-slate-50/80 px-3 py-2.5">
+            <ShieldCheck className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+            <p className="text-[11px] leading-tight text-slate-400">
+              Private platform · Authorized access only
+            </p>
+          </div>
         </aside>
 
         <div className="flex min-h-screen min-w-0 flex-1 flex-col">

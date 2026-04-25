@@ -1,176 +1,180 @@
+import { AlertTriangle, BarChart3, Building2, ReceiptText, ShieldCheck, Wrench } from 'lucide-react'
 import { Link } from 'react-router-dom'
 
-const kpis = [
-  { label: 'Blocked rooms', value: '2' },
-  { label: 'Pending approvals', value: '3' },
-  { label: 'Vendor escalations', value: '1' },
-  { label: 'Guest response due', value: '1' },
-]
-
-const openNowItems = [
+const modules = [
   {
-    title: 'Room 214 HVAC still blocked',
-    detail: 'Engineering follow-up pending since 17:40',
-    tone: 'critical',
+    icon: AlertTriangle,
+    label: 'Incident Management',
+    description:
+      'Track and resolve operational incidents, blocked rooms, and critical issues in real time.',
   },
   {
-    title: 'Room 402 lock access unresolved',
-    detail: 'Guest relocation completed, permanent fix pending',
-    tone: 'critical',
+    icon: Building2,
+    label: 'Vendor Management',
+    description:
+      'Manage vendor relationships, SLA adherence, contacts, and escalation history.',
   },
   {
-    title: 'Laundry vendor escalation open',
-    detail: 'SLA breach requires callback confirmation',
-    tone: 'warning',
-  },
-] as const
-
-const recentActivityItems = [
-  {
-    title: 'Expense approval queue updated',
-    detail: '3 submitted items awaiting final decision',
-    time: '19:17',
+    icon: Wrench,
+    label: 'Maintenance',
+    description:
+      'Assign, track, and close maintenance tickets with priority and location tracking.',
   },
   {
-    title: 'Negative review flagged for response',
-    detail: 'Manager response due on current shift',
-    time: '18:54',
+    icon: ReceiptText,
+    label: 'Expense Control',
+    description:
+      'Submit, review, and approve cash expenses with full audit trail and spend visibility.',
   },
   {
-    title: 'Blocked room reassigned to engineering',
-    detail: 'Priority confirmed as critical',
-    time: '18:32',
+    icon: BarChart3,
+    label: 'Operations Visibility',
+    description:
+      'Director-level dashboard with KPIs across all operational modules, unified in one view.',
+  },
+  {
+    icon: ShieldCheck,
+    label: 'Access & Security',
+    description:
+      'Organization-scoped data isolation with row-level security. Every action is tied to an authenticated user.',
   },
 ]
-
-function getToneClass(tone: 'critical' | 'warning') {
-  if (tone === 'critical') {
-    return 'bg-red-50 text-red-700'
-  }
-
-  return 'bg-amber-50 text-amber-700'
-}
 
 export function Landing() {
   return (
-    <div className="min-h-screen bg-slate-50/60 px-4 py-4 md:px-6 md:py-5">
-      <div className="mx-auto w-full max-w-[1100px]">
-        <header className="flex items-center justify-between">
-          <div className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-slate-950 text-sm font-semibold text-white">
-            OC
+    <div className="min-h-screen">
+      <header className="border-b border-slate-200/70 bg-white/80 backdrop-blur-xl">
+        <div className="mx-auto flex max-w-[1100px] items-center justify-between px-6 py-4">
+          <div className="flex items-center gap-3">
+            <div className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-slate-950 text-sm font-semibold text-white">
+              OC
+            </div>
+            <div>
+              <p className="text-sm font-semibold leading-tight text-slate-950">Ops Core</p>
+              <p className="text-[11px] leading-tight text-slate-400">Internal Operations Platform</p>
+            </div>
           </div>
 
-          <div className="flex items-center gap-4">
-            <Link to="/sign-in" className="text-sm font-medium text-slate-600 hover:text-slate-900">
+          <div className="flex items-center gap-3">
+            <span className="hidden items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-500 sm:inline-flex">
+              <ShieldCheck className="h-3 w-3 text-slate-400" />
+              Authorized access only
+            </span>
+            <Link to="/sign-in" className="button-primary px-4 py-2">
               Sign in
             </Link>
-            <Link to="/sign-up" className="button-primary px-4 py-2.5">
-              Create account
-            </Link>
           </div>
-        </header>
+        </div>
+      </header>
 
-        <main className="mt-6 space-y-5 md:mt-8">
-          <section className="max-w-[760px] space-y-3.5">
-            <h1 className="text-3xl font-semibold leading-[1.05] tracking-tight text-slate-950 md:text-[52px] md:leading-[1.03]">
-              Operations don’t break.
-              <br />
-              They drift.
-              <br />
-              This keeps them under control.
-            </h1>
+      <main className="mx-auto max-w-[1100px] px-6 py-16 md:py-24">
+        <div className="max-w-[680px] space-y-6">
+          <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 shadow-sm">
+            <ShieldCheck className="h-3.5 w-3.5 text-slate-400" />
+            Private platform for authorized teams
+          </div>
 
-            <p className="max-w-[680px] text-sm leading-6 text-slate-600 md:text-base">
-              Incidents, spend, vendors, and guest impact in one control surface.
-            </p>
+          <h1 className="text-4xl font-semibold leading-[1.08] tracking-tight text-slate-950 md:text-[52px]">
+            Internal operations,
+            <br />
+            unified and controlled.
+          </h1>
 
-            <Link to="/sign-up" className="button-primary inline-flex px-4 py-2.5">
-              Create account
+          <p className="text-base leading-7 text-slate-600 md:text-lg">
+            Incidents, vendors, maintenance, spend, and guest quality — managed in one secure
+            control surface for authorized operations teams.
+          </p>
+
+          <div className="flex flex-wrap items-center gap-3">
+            <Link to="/sign-in" className="button-primary px-5 py-3">
+              Sign in to workspace
             </Link>
-          </section>
+            <a
+              href="mailto:?subject=Ops Core — Access Request"
+              className="button-secondary px-5 py-3"
+            >
+              Request access
+            </a>
+          </div>
 
-          <section className="rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm md:p-5">
-            <div className="space-y-1">
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-                Product preview
+          <p className="text-sm text-slate-400">
+            Access is granted by your organization's operations lead. Accounts are not
+            self-provisioned.
+          </p>
+        </div>
+
+        <div className="mt-20 space-y-6">
+          <div>
+            <p className="eyebrow-label">Platform capabilities</p>
+            <h2 className="mt-1 text-2xl font-semibold tracking-tight text-slate-950">
+              Everything operations needs, nothing it doesn't.
+            </h2>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {modules.map(({ icon: Icon, label, description }) => (
+              <div key={label} className="surface-panel space-y-3 p-6">
+                <div className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-slate-950 text-white">
+                  <Icon className="h-4 w-4" />
+                </div>
+                <div>
+                  <p className="font-semibold text-slate-950">{label}</p>
+                  <p className="mt-1 text-sm leading-6 text-slate-500">{description}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="mt-16 rounded-3xl border border-slate-200 bg-slate-950 px-8 py-10 text-white md:px-10">
+          <div className="flex flex-col gap-8 md:flex-row md:items-center md:justify-between">
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <ShieldCheck className="h-4 w-4 text-slate-400" />
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+                  Restricted access
+                </p>
+              </div>
+              <p className="text-xl font-semibold">For authorized personnel only</p>
+              <p className="max-w-lg text-sm leading-6 text-slate-400">
+                Ops Core is a private internal tool. Accounts are provisioned by your
+                organization's administrator. If you need access, contact your operations lead or
+                request a demo below.
               </p>
-              <h2 className="text-xl font-semibold tracking-tight text-slate-950 md:text-2xl">
-                Operational snapshot
-              </h2>
             </div>
-
-            <div className="mt-4 grid gap-2 md:grid-cols-4">
-              {kpis.map((kpi) => (
-                <div key={kpi.label} className="rounded-2xl border border-slate-200 px-3 py-2">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
-                    {kpi.label}
-                  </p>
-                  <p className="mt-1 text-2xl font-semibold tracking-tight text-slate-950">
-                    {kpi.value}
-                  </p>
-                </div>
-              ))}
+            <div className="flex shrink-0 flex-col gap-3 sm:flex-row">
+              <Link
+                to="/sign-in"
+                className="inline-flex items-center justify-center rounded-2xl bg-white px-5 py-3 text-sm font-medium text-slate-950 transition-all duration-150 hover:-translate-y-px hover:shadow-lg"
+              >
+                Sign in
+              </Link>
+              <a
+                href="mailto:?subject=Ops Core — Request a Demo"
+                className="inline-flex items-center justify-center rounded-2xl border border-white/20 px-5 py-3 text-sm font-medium text-white transition-all duration-150 hover:-translate-y-px hover:border-white/40 hover:bg-white/10"
+              >
+                Request a demo
+              </a>
             </div>
+          </div>
+        </div>
+      </main>
 
-            <div className="mt-5 grid gap-4 lg:grid-cols-[1.15fr_0.85fr]">
-              <div className="space-y-2">
-                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-                  Open now
-                </p>
-                <div className="space-y-1.5">
-                  {openNowItems.map((item) => (
-                    <Link
-                      key={item.title}
-                      to="/app"
-                      className="block cursor-pointer rounded-2xl border border-slate-200 px-3 py-2.5 transition duration-150 hover:-translate-y-0.5 hover:shadow-sm"
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <p className="text-sm font-medium leading-5 text-slate-900">{item.title}</p>
-                          <p className="mt-0.5 text-sm leading-5 text-slate-600">{item.detail}</p>
-                        </div>
-                        <span
-                          className={[
-                            'inline-flex rounded-full px-2 py-0.5 text-xs font-semibold',
-                            getToneClass(item.tone),
-                          ].join(' ')}
-                        >
-                          Open
-                        </span>
-                      </div>
-                    </Link>
-                  ))}
-                </div>
+      <footer className="border-t border-slate-200/70 py-8">
+        <div className="mx-auto max-w-[1100px] px-6">
+          <div className="flex flex-col items-center justify-between gap-3 sm:flex-row">
+            <div className="flex items-center gap-2.5">
+              <div className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-slate-950 text-xs font-semibold text-white">
+                OC
               </div>
-
-              <div className="space-y-2">
-                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-                  Recent activity
-                </p>
-                <div className="space-y-1.5">
-                  {recentActivityItems.map((item) => (
-                    <Link
-                      key={item.title}
-                      to="/app"
-                      className="block cursor-pointer rounded-2xl border border-slate-200 px-3 py-2.5 transition duration-150 hover:-translate-y-0.5 hover:shadow-sm"
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <p className="text-sm font-medium leading-5 text-slate-900">{item.title}</p>
-                          <p className="mt-0.5 text-sm leading-5 text-slate-600">{item.detail}</p>
-                        </div>
-                        <span className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">
-                          {item.time}
-                        </span>
-                      </div>
-                    </Link>
-                  ))}
-                </div>
-              </div>
+              <p className="text-sm font-medium text-slate-600">Ops Core</p>
             </div>
-          </section>
-        </main>
-      </div>
+            <p className="text-xs text-slate-400">
+              Private platform · Authorized access only · All activity is logged
+            </p>
+          </div>
+        </div>
+      </footer>
     </div>
   )
 }

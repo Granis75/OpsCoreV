@@ -16,7 +16,6 @@ import { Maintenance } from './pages/Maintenance'
 import { Operations } from './pages/Operations'
 import { Reputation } from './pages/Reputation'
 import { ResetPassword } from './pages/ResetPassword'
-import { SignUp } from './pages/SignUp'
 import { Teams } from './pages/Teams'
 import { VendorDetail } from './pages/VendorDetail'
 import { Vendors } from './pages/Vendors'
@@ -87,7 +86,7 @@ function App() {
     <Routes>
       <Route path="/" element={<Landing />} />
       <Route path="/sign-in" element={session ? <Navigate to="/app" replace /> : <Login />} />
-      <Route path="/sign-up" element={session ? <Navigate to="/app" replace /> : <SignUp />} />
+      <Route path="/sign-up" element={<Navigate to="/sign-in" replace />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/reset-password" element={<ResetPassword />} />
       <Route path="/login" element={<Navigate to="/sign-in" replace />} />

@@ -44,10 +44,10 @@ export function Login() {
         >
           <div className="mb-6 space-y-1.5">
             <p className="eyebrow-label">
-              Ops Core V12
+              Private platform · Authorized access only
             </p>
             <p className="text-sm leading-6 text-slate-500">
-              Sign in to continue with today’s incidents, spend, and guest feedback.
+              Sign in with your organization credentials to access the operational workspace.
             </p>
           </div>
 
@@ -98,17 +98,16 @@ export function Login() {
               {isSubmitting ? 'Signing in...' : 'Sign in'}
             </button>
 
-            <div className="flex flex-col gap-2 text-sm text-slate-500 md:flex-row md:items-center md:justify-between">
+            <div className="flex items-center justify-between text-sm text-slate-500">
               <Link to="/forgot-password" className="font-medium text-slate-950">
                 Forgot password?
               </Link>
-              <span>
-                New here?{' '}
-                <Link to="/sign-up" className="font-medium text-slate-950">
-                  Create account
-                </Link>
-              </span>
             </div>
+
+            <p className="text-xs leading-5 text-slate-400">
+              Access is granted by your organization's administrator. No self-registration is
+              available.
+            </p>
           </form>
         </SurfaceCard>
       </div>
