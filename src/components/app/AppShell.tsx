@@ -14,37 +14,21 @@ function isActivePath(pathname: string, target: string) {
 }
 
 function getDisplayEmail(email: string | null | undefined) {
-  if (!email) {
-    return 'workspace@user'
-  }
-
-  if (email.length <= 28) {
-    return email
-  }
-
+  if (!email) return 'workspace@user'
+  if (email.length <= 28) return email
   return `${email.slice(0, 25)}...`
 }
 
 function getDisplayName(email: string | null | undefined) {
-  if (!email) {
-    return 'Workspace user'
-  }
-
+  if (!email) return 'Workspace user'
   const [localPart] = email.split('@')
   const cleaned = localPart.replace(/[._-]+/g, ' ').trim()
-
-  if (!cleaned) {
-    return email
-  }
-
+  if (!cleaned) return email
   return cleaned.replace(/\b\w/g, (letter) => letter.toUpperCase())
 }
 
 function getAvatarLabel(email: string | null | undefined) {
-  if (!email) {
-    return 'W'
-  }
-
+  if (!email) return 'W'
   return email.charAt(0).toUpperCase()
 }
 
@@ -62,10 +46,7 @@ export function AppShell({ session }: AppShellProps) {
   const userName = getDisplayName(userEmail)
 
   async function handleSignOut() {
-    if (!supabase) {
-      return
-    }
-
+    if (!supabase) return
     setIsSigningOut(true)
     await supabase.auth.signOut()
     setIsSigningOut(false)
@@ -74,28 +55,28 @@ export function AppShell({ session }: AppShellProps) {
   return (
     <div className="min-h-screen">
       <div className="mx-auto flex min-h-screen max-w-[1600px]">
-        <aside className="hidden w-72 shrink-0 flex-col border-r border-slate-200/70 bg-white/72 px-6 py-5 backdrop-blur-xl xl:flex">
-          <div className="mb-8 space-y-4">
-            <div className="flex items-center gap-3">
-              <div className="inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-slate-950 text-sm font-semibold text-white shadow-sm">
-                OC
-              </div>
-              <div>
-                <p className="text-sm font-semibold leading-tight text-slate-950">Ops Core</p>
-                <p className="text-[11px] leading-tight text-slate-400">Internal Platform</p>
-              </div>
-            </div>
-            <div className="space-y-1">
-              <p className="text-base font-semibold tracking-tight text-slate-950">
-                Operational workspace
-              </p>
-              <p className="text-sm leading-6 text-slate-500">
-                Incidents, vendors, spend, and guest quality in one control surface.
-              </p>
-            </div>
+
+        {/* ── Sidebar ────────────────────────────────────────────── */}
+        <aside
+          className="hidden w-60 shrink-0 flex-col border-r border-slate-200 xl:flex"
+          style={{ background: 'var(--paper-warm)' }}
+        >
+          {/* Brand */}
+          <div className="border-b border-slate-200 px-6 py-5">
+            <p
+              className="font-serif text-[22px] font-semibold leading-none tracking-[-0.02em]"
+              style={{ color: 'var(--black)' }}
+            >
+              OPS
+            </p>
+            <p className="mt-1 font-mono text-[9px] uppercase tracking-[0.18em]"
+               style={{ color: 'var(--muted)' }}>
+              Internal Platform
+            </p>
           </div>
 
-          <nav className="flex flex-1 flex-col gap-2" aria-label="Main navigation">
+          {/* Navigation */}
+          <nav className="flex flex-1 flex-col gap-0.5 px-3 py-4" aria-label="Main navigation">
             {navigationItems.map(({ icon: Icon, label, to }) => (
               <NavLink
                 key={to}
@@ -103,50 +84,57 @@ export function AppShell({ session }: AppShellProps) {
                 end={to === '/app'}
                 className={({ isActive }) =>
                   [
-                    'flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-medium transition-all duration-150',
+                    'flex items-center gap-2.5 rounded-lg px-3 py-2 text-[13px] font-medium transition-all duration-150',
                     isActive
-                      ? 'bg-slate-950 text-white shadow-sm'
-                      : 'text-slate-600 hover:-translate-y-px hover:bg-white hover:text-slate-950 hover:shadow-sm',
+                      ? 'bg-slate-900 text-slate-50'
+                      : 'text-slate-600 hover:bg-slate-200 hover:text-slate-900',
                   ].join(' ')
                 }
               >
-                <Icon className="h-4 w-4 shrink-0" />
+                <Icon className="h-3.5 w-3.5 shrink-0" strokeWidth={1.5} />
                 <span>{label}</span>
               </NavLink>
             ))}
           </nav>
 
-          <div className="mt-6 flex items-center gap-2 rounded-2xl border border-slate-200/80 bg-slate-50/80 px-3 py-2.5">
-            <ShieldCheck className="h-3.5 w-3.5 shrink-0 text-slate-400" />
-            <p className="text-[11px] leading-tight text-slate-400">
-              Private platform · Authorized access only
-            </p>
+          {/* Private badge */}
+          <div className="border-t border-slate-200 px-5 py-4">
+            <div className="flex items-center gap-2">
+              <ShieldCheck className="h-3 w-3 shrink-0" style={{ color: 'var(--muted)' }} strokeWidth={1.5} />
+              <p className="font-mono text-[9px] uppercase tracking-[0.14em]"
+                 style={{ color: 'var(--muted)' }}>
+                Private · Authorized access only
+              </p>
+            </div>
           </div>
         </aside>
 
+        {/* ── Main content ───────────────────────────────────────── */}
         <div className="flex min-h-screen min-w-0 flex-1 flex-col">
-          <header className="sticky top-0 z-20 border-b border-slate-200/70 bg-white/70 backdrop-blur-xl">
-            <div className="flex flex-col gap-4 px-5 py-4 md:px-8">
-              <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-                <div className="space-y-2">
-                  <p className="eyebrow-label">
-                    {currentItem.label}
-                  </p>
-                  <p className="max-w-2xl text-sm leading-6 text-slate-500">
-                    {currentItem.description}
-                  </p>
+
+          {/* Header */}
+          <header className="sticky top-0 z-20 border-b border-slate-200 bg-white">
+            <div className="flex flex-col gap-3 px-5 py-4 md:px-8">
+              <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+
+                {/* Page label */}
+                <div className="space-y-1">
+                  <p className="eyebrow-label">{currentItem.label}</p>
+                  <p className="text-xs leading-5 text-slate-500">{currentItem.description}</p>
                 </div>
 
+                {/* User + sign out */}
                 <div className="flex flex-wrap items-center gap-2">
-                  <div className="inline-flex items-center gap-3 rounded-2xl border border-slate-200/80 bg-white/90 px-3 py-2 text-sm text-slate-700 shadow-sm">
-                    <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-slate-950 text-xs font-semibold text-white shadow-sm">
+                  <div className="flex items-center gap-2.5 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                    <span
+                      className="inline-flex h-7 w-7 items-center justify-center rounded-full font-mono text-[11px] font-medium text-slate-50"
+                      style={{ background: 'var(--black)' }}
+                    >
                       {getAvatarLabel(userEmail)}
                     </span>
                     <div className="min-w-0">
-                      <p className="truncate text-sm font-medium text-slate-900">
-                        {userName}
-                      </p>
-                      <p className="truncate text-xs text-slate-500">
+                      <p className="truncate text-[13px] font-medium text-slate-900">{userName}</p>
+                      <p className="truncate font-mono text-[10px] text-slate-500">
                         {getDisplayEmail(userEmail)}
                       </p>
                     </div>
@@ -156,18 +144,16 @@ export function AppShell({ session }: AppShellProps) {
                     type="button"
                     onClick={() => void handleSignOut()}
                     disabled={isSigningOut}
-                    className="button-pill gap-2"
+                    className="button-pill gap-1.5"
                   >
-                    <LogOut className="h-3.5 w-3.5" />
-                    {isSigningOut ? 'Signing out...' : 'Logout'}
+                    <LogOut className="h-3 w-3" strokeWidth={1.5} />
+                    {isSigningOut ? 'Signing out…' : 'Logout'}
                   </button>
                 </div>
               </div>
 
-              <nav
-                className="flex gap-2 overflow-x-auto xl:hidden"
-                aria-label="Mobile navigation"
-              >
+              {/* Mobile navigation pills */}
+              <nav className="flex gap-1.5 overflow-x-auto xl:hidden" aria-label="Mobile navigation">
                 {navigationItems.map(({ label, to }) => (
                   <NavLink
                     key={to}
@@ -175,10 +161,10 @@ export function AppShell({ session }: AppShellProps) {
                     end={to === '/app'}
                     className={({ isActive }) =>
                       [
-                        'whitespace-nowrap rounded-full border px-3 py-2 text-sm font-medium transition-all duration-150',
+                        'whitespace-nowrap rounded-full border px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.12em] transition-all duration-150',
                         isActive
-                          ? 'border-slate-950 bg-slate-950 text-white shadow-sm'
-                          : 'border-slate-200/80 bg-white/85 text-slate-600 hover:-translate-y-px hover:bg-white hover:text-slate-950 hover:shadow-sm',
+                          ? 'border-slate-900 bg-slate-900 text-slate-50'
+                          : 'border-slate-200 text-slate-600 hover:border-slate-400 hover:text-slate-900',
                       ].join(' ')
                     }
                   >
@@ -189,7 +175,7 @@ export function AppShell({ session }: AppShellProps) {
             </div>
           </header>
 
-          <main className="flex-1 px-5 py-7 md:px-8 md:py-10">
+          <main className="flex-1 px-5 py-8 md:px-8 md:py-10">
             <Outlet />
           </main>
         </div>

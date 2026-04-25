@@ -2,12 +2,127 @@
 export default {
   content: ['./index.html', './src/**/*.{js,ts,jsx,tsx}'],
   theme: {
+    // Override default font stacks so Tailwind's font-sans/serif/mono utilities
+    // immediately resolve to our chosen typefaces.
+    fontFamily: {
+      sans:  ['"Geist"', '"Geist Sans"', 'system-ui', '-apple-system', 'BlinkMacSystemFont', '"Segoe UI"', 'sans-serif'],
+      serif: ['"Fraunces"', 'Georgia', 'ui-serif', 'serif'],
+      mono:  ['"JetBrains Mono"', '"Fira Code"', 'ui-monospace', 'monospace'],
+    },
     extend: {
+      colors: {
+        // ── Warm neutral palette — remaps every slate-* utility ───────────
+        slate: {
+          50:  '#F5F4F0',
+          100: '#EDEAE0',
+          200: '#DCD8CC',
+          300: '#C8C4BA',
+          400: '#7A7770',
+          500: '#7A7770',
+          600: '#5C5956',
+          700: '#3D3A37',
+          800: '#2A2723',
+          900: '#1A1A1A',
+          950: '#0A0A0A',
+        },
+        // ── Muted brick red — remaps red-* and rose-* ────────────────────
+        red: {
+          50:  '#FBF1F0',
+          100: '#F5E0DE',
+          200: '#EDB8B5',
+          300: '#E08F8A',
+          400: '#CC6660',
+          500: '#B84A3B',
+          600: '#B84A3B',
+          700: '#993D31',
+          800: '#782F25',
+          900: '#582218',
+          950: '#3A1510',
+        },
+        rose: {
+          50:  '#FBF1F0',
+          100: '#F5E0DE',
+          200: '#EDB8B5',
+          300: '#E08F8A',
+          400: '#CC6660',
+          500: '#B84A3B',
+          600: '#B84A3B',
+          700: '#993D31',
+          800: '#782F25',
+          900: '#582218',
+          950: '#3A1510',
+        },
+        // ── Warm amber — remaps amber-* ────────────────────────────────────
+        amber: {
+          50:  '#FBF6EA',
+          100: '#F6E9CA',
+          200: '#EDD596',
+          300: '#E8BE6A',
+          400: '#E8A33B',
+          500: '#E8A33B',
+          600: '#D08A22',
+          700: '#B0711C',
+          800: '#885516',
+          900: '#5E3B10',
+          950: '#3A230A',
+        },
+        // ── Muted green — remaps emerald-* ────────────────────────────────
+        emerald: {
+          50:  '#EEF4F0',
+          100: '#D8E9DC',
+          200: '#B0D3B9',
+          300: '#88BD96',
+          400: '#60A674',
+          500: '#4A7C5A',
+          600: '#4A7C5A',
+          700: '#3A6348',
+          800: '#2A4A35',
+          900: '#1A3022',
+          950: '#0E1E15',
+        },
+        // ── sky → accent tones so "Preferred" badge stays on-palette ─────
+        sky: {
+          50:  '#FBF6EA',
+          100: '#F6E9CA',
+          200: '#EDD596',
+          300: '#E8A33B',
+          400: '#D4632A',
+          500: '#D4632A',
+          600: '#B84A1A',
+          700: '#963D14',
+        },
+        // ── Named brand tokens ─────────────────────────────────────────────
+        accent:        '#D4632A',
+        'accent-soft': '#E89B6A',
+        paper:         '#F5F4F0',
+        'paper-warm':  '#EDEAE0',
+        'line-soft':   '#DCD8CC',
+        muted:         '#7A7770',
+        ink:           '#1A1A1A',
+      },
+      // ── Border radius — clamp everything to ≤ 12px ────────────────────
+      borderRadius: {
+        sm:    '3px',
+        DEFAULT:'8px',
+        md:    '8px',
+        lg:    '12px',
+        xl:    '12px',
+        '2xl': '12px',
+        '3xl': '12px',
+        full:  '9999px',
+      },
+      // ── Shadows — removed; hairline borders carry the visual weight ───
       boxShadow: {
-        shell:
-          '0 20px 48px -28px rgba(15, 23, 42, 0.18), 0 10px 28px -24px rgba(15, 23, 42, 0.12)',
-        'shell-hover':
-          '0 24px 56px -28px rgba(15, 23, 42, 0.22), 0 16px 32px -24px rgba(15, 23, 42, 0.16)',
+        sm:           'none',
+        DEFAULT:      'none',
+        md:           'none',
+        lg:           'none',
+        xl:           'none',
+        '2xl':        'none',
+        inner:        'inset 0 1px 0 0 #DCD8CC',
+        shell:        'none',
+        'shell-hover':'none',
+        editorial:    '0 40px 80px -20px rgba(10, 10, 10, 0.10)',
       },
     },
   },

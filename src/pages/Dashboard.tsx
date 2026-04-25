@@ -298,14 +298,14 @@ function sortRecentActivity(items: ActivityItem[]) {
 
 function getToneClasses(severity: DashboardSeverity) {
   if (severity === 'critical') {
-    return 'bg-red-50 text-red-600'
+    return 'border-red-200 text-red-600'
   }
 
   if (severity === 'warning') {
-    return 'bg-amber-50 text-amber-600'
+    return 'border-amber-200 text-amber-600'
   }
 
-  return 'bg-slate-100 text-slate-600'
+  return 'border-slate-200 text-slate-500'
 }
 
 function getSeverityLabel(severity: DashboardSeverity) {
@@ -696,22 +696,15 @@ interface KpiCardProps {
 
 function KpiCard({ label, value, helper, href }: KpiCardProps) {
   return (
-    <Link
-      to={href}
-      className="surface-panel interactive-lift p-4"
-    >
-      <div className="space-y-2">
-        <div className="flex items-end justify-between gap-3">
-          <p className="text-3xl font-semibold tracking-tight text-slate-950">
-            {value}
-          </p>
-          <p className="text-[11px] uppercase tracking-[0.24em] text-slate-400">
-            {label}
-          </p>
-        </div>
-        <div>
-          <p className="text-sm leading-6 text-slate-500">{helper}</p>
-        </div>
+    <Link to={href} className="surface-panel interactive-lift block p-5">
+      <div className="space-y-3">
+        <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-slate-400">
+          {label}
+        </p>
+        <p className="font-serif text-4xl font-medium tracking-tight text-slate-950">
+          {value}
+        </p>
+        <p className="text-xs leading-5 text-slate-500">{helper}</p>
       </div>
     </Link>
   )
@@ -725,23 +718,23 @@ function CriticalPathRow({ item }: CriticalPathRowProps) {
   return (
     <Link
       to={item.href}
-      className="group grid gap-2 rounded-2xl border border-slate-200/70 bg-white/50 px-3.5 py-3 transition-all duration-150 hover:-translate-y-px hover:bg-white hover:shadow-sm md:grid-cols-[minmax(0,1fr)_auto_auto] md:items-center"
+      className="group grid gap-2 rounded-lg border border-slate-200 bg-white px-4 py-3 transition-all duration-150 hover:-translate-y-px md:grid-cols-[minmax(0,1fr)_auto_auto] md:items-center"
     >
       <div className="min-w-0">
-        <p className="truncate text-sm font-medium text-slate-900">{item.title}</p>
-        <p className="truncate text-[11px] uppercase tracking-[0.24em] text-slate-400">
+        <p className="truncate text-[13px] font-medium text-slate-900">{item.title}</p>
+        <p className="truncate font-mono text-[10px] uppercase tracking-[0.16em] text-slate-400">
           {item.context}
         </p>
       </div>
       <span
         className={[
-          'inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.2em]',
+          'inline-flex rounded border px-2 py-0.5 font-mono text-[9px] uppercase tracking-[0.14em]',
           getToneClasses(item.severity),
         ].join(' ')}
       >
         {getSeverityLabel(item.severity)}
       </span>
-      <span className="text-[11px] uppercase tracking-[0.24em] text-slate-500 transition-colors group-hover:text-slate-950">
+      <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-slate-400 transition-colors group-hover:text-slate-900">
         {item.actionLabel}
       </span>
     </Link>
@@ -756,15 +749,15 @@ function AttentionRow({ item }: AttentionRowProps) {
   return (
     <Link
       to={item.href}
-      className="group grid gap-2 rounded-2xl border border-slate-200/70 bg-white/50 px-3.5 py-3 transition-all duration-150 hover:-translate-y-px hover:bg-white hover:shadow-sm md:grid-cols-[auto_minmax(0,1fr)_auto] md:items-center"
+      className="group grid gap-2 rounded-lg border border-slate-200 bg-white px-4 py-3 transition-all duration-150 hover:-translate-y-px md:grid-cols-[auto_minmax(0,1fr)_auto] md:items-center"
     >
-      <span className="inline-flex rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.2em] text-slate-600">
+      <span className="inline-flex rounded border border-slate-200 px-2 py-0.5 font-mono text-[9px] uppercase tracking-[0.14em] text-slate-500">
         {moduleLabels[item.module]}
       </span>
       <div className="min-w-0">
-        <p className="truncate text-sm font-medium text-slate-900">{item.description}</p>
+        <p className="truncate text-[13px] font-medium text-slate-900">{item.description}</p>
       </div>
-      <span className="text-[11px] uppercase tracking-[0.24em] text-slate-500 transition-colors group-hover:text-slate-950">
+      <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-slate-400 transition-colors group-hover:text-slate-900">
         {item.actionLabel}
       </span>
     </Link>
@@ -779,13 +772,13 @@ function ActivityRow({ item }: ActivityRowProps) {
   return (
     <Link
       to={item.href}
-      className="group grid gap-2 rounded-2xl border border-slate-200/70 bg-white/50 px-3.5 py-3 transition-all duration-150 hover:-translate-y-px hover:bg-white hover:shadow-sm md:grid-cols-[auto_minmax(0,1fr)_auto] md:items-center"
+      className="group grid gap-2 rounded-lg border border-slate-200 bg-white px-4 py-3 transition-all duration-150 hover:-translate-y-px md:grid-cols-[auto_minmax(0,1fr)_auto] md:items-center"
     >
-      <span className="inline-flex rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.2em] text-slate-600">
+      <span className="inline-flex rounded border border-slate-200 px-2 py-0.5 font-mono text-[9px] uppercase tracking-[0.14em] text-slate-500">
         {moduleLabels[item.module]}
       </span>
-      <p className="truncate text-sm font-medium text-slate-900">{item.label}</p>
-      <span className="text-[11px] uppercase tracking-[0.24em] text-slate-400 transition-colors group-hover:text-slate-700">
+      <p className="truncate text-[13px] font-medium text-slate-900">{item.label}</p>
+      <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-slate-400 transition-colors group-hover:text-slate-700">
         {formatTimestamp(item.timestamp)}
       </span>
     </Link>
@@ -923,22 +916,13 @@ export function Dashboard() {
           description={errorMessage}
         >
           <div className="grid gap-2 md:grid-cols-3">
-            <Link
-              to="/app/maintenance"
-              className="rounded-2xl border border-slate-100 px-3.5 py-2.5 text-sm font-medium text-slate-900 transition-colors hover:bg-slate-50/80"
-            >
+            <Link to="/app/maintenance" className="button-secondary text-xs">
               Open Maintenance
             </Link>
-            <Link
-              to="/app/expenses"
-              className="rounded-2xl border border-slate-100 px-3.5 py-2.5 text-sm font-medium text-slate-900 transition-colors hover:bg-slate-50/80"
-            >
+            <Link to="/app/expenses" className="button-secondary text-xs">
               Open Expenses
             </Link>
-            <Link
-              to="/app/operations"
-              className="rounded-2xl border border-slate-100 px-3.5 py-2.5 text-sm font-medium text-slate-900 transition-colors hover:bg-slate-50/80"
-            >
+            <Link to="/app/operations" className="button-secondary text-xs">
               Open Operations
             </Link>
           </div>
@@ -961,7 +945,7 @@ export function Dashboard() {
               ) : (
                 <Link
                   to="/app/maintenance"
-                  className="block rounded-2xl border border-dashed border-slate-200 px-3.5 py-2.5 text-sm text-slate-600 transition-colors hover:bg-slate-50/80"
+                  className="block rounded-lg border border-dashed border-slate-200 px-4 py-3 text-[13px] text-slate-500 transition-colors hover:bg-slate-100"
                 >
                   No blocking issues right now. Open Maintenance.
                 </Link>
@@ -983,7 +967,7 @@ export function Dashboard() {
               ) : (
                 <Link
                   to="/app/operations"
-                  className="block rounded-2xl border border-dashed border-slate-200 px-3.5 py-2.5 text-sm text-slate-600 transition-colors hover:bg-slate-50/80"
+                  className="block rounded-lg border border-dashed border-slate-200 px-4 py-3 text-[13px] text-slate-500 transition-colors hover:bg-slate-100"
                 >
                   No additional actions queued. Open Operations.
                 </Link>
@@ -1007,7 +991,7 @@ export function Dashboard() {
             ) : (
               <Link
                 to="/app/operations"
-                className="block rounded-2xl border border-dashed border-slate-200 px-3.5 py-2.5 text-sm text-slate-600 transition-colors hover:bg-slate-50/80"
+                className="block rounded-lg border border-dashed border-slate-200 px-4 py-3 text-[13px] text-slate-500 transition-colors hover:bg-slate-100"
               >
                 No recent activity yet. Open Operations to start logging work.
               </Link>

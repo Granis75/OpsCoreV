@@ -1,6 +1,5 @@
 import { useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
-import { SurfaceCard } from '../components/ui/SurfaceCard'
 import { isSupabaseConfigured, supabase } from '../lib/supabase'
 
 export function ForgotPassword() {
@@ -38,35 +37,56 @@ export function ForgotPassword() {
     if (error) {
       setErrorMessage(error.message)
     } else {
-      setInfoMessage(`Password reset email sent to ${email.trim()}.`)
+      setInfoMessage(`Reset link sent to ${email.trim()}.`)
     }
 
     setIsSubmitting(false)
   }
 
   return (
-    <div className="min-h-screen bg-transparent px-5 py-10 md:px-8">
-      <div className="mx-auto flex min-h-[calc(100vh-5rem)] max-w-md items-center">
-        <SurfaceCard
-          title="Forgot password"
-          description="Request a secure password reset link for your Ops Core account."
-          className="w-full"
-        >
-          <div className="mb-6 space-y-1.5">
-            <p className="eyebrow-label">
-              Ops Core V12
+    <div className="flex min-h-screen flex-col" style={{ background: 'var(--paper)' }}>
+
+      {/* Header */}
+      <header className="border-b border-slate-200 bg-white">
+        <div className="mx-auto flex max-w-[1100px] items-center justify-between px-8 py-4">
+          <Link to="/">
+            <p
+              className="font-serif text-[20px] font-semibold leading-none tracking-[-0.02em]"
+              style={{ color: 'var(--black)' }}
+            >
+              OPS
             </p>
+          </Link>
+          <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-slate-400">
+            Password recovery
+          </span>
+        </div>
+      </header>
+
+      {/* Form */}
+      <div className="flex flex-1 items-center justify-center px-6 py-16">
+        <div className="w-full max-w-sm space-y-8">
+
+          <div className="space-y-3">
+            <div className="flex items-center gap-3">
+              <div className="h-px w-6 bg-slate-300" />
+              <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-slate-500">
+                OPS — Password recovery
+              </span>
+            </div>
+            <h1 className="font-serif text-2xl font-medium tracking-tight text-slate-900">
+              Forgot password
+            </h1>
             <p className="text-sm leading-6 text-slate-500">
-              We’ll send a reset link so you can get back to the workspace quickly.
+              We'll send a reset link so you can get back to the workspace quickly.
             </p>
           </div>
 
           <form className="space-y-4" onSubmit={handleSubmit}>
-            <label className="block space-y-2">
-              <span className="eyebrow-label">
-                Email
-              </span>
+            <div className="space-y-1.5">
+              <label className="eyebrow-label" htmlFor="email">Email</label>
               <input
+                id="email"
                 type="email"
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
@@ -74,18 +94,18 @@ export function ForgotPassword() {
                 required
                 className="field-input"
               />
-            </label>
+            </div>
 
             {errorMessage ? (
-              <p className="text-sm text-rose-600">{errorMessage}</p>
+              <p className="text-sm" style={{ color: 'var(--danger)' }}>{errorMessage}</p>
             ) : null}
 
             {infoMessage ? (
-              <p className="text-sm text-emerald-700">{infoMessage}</p>
+              <p className="text-sm" style={{ color: 'var(--success)' }}>{infoMessage}</p>
             ) : null}
 
             {!isSupabaseConfigured ? (
-              <p className="text-sm text-amber-700">
+              <p className="text-sm" style={{ color: 'var(--warning)' }}>
                 Supabase env missing. Fill the root .env.local file first.
               </p>
             ) : null}
@@ -95,17 +115,20 @@ export function ForgotPassword() {
               disabled={isSubmitting || !isSupabaseConfigured}
               className="button-primary w-full"
             >
-              {isSubmitting ? 'Sending reset email...' : 'Send reset email'}
+              {isSubmitting ? 'Sending…' : 'Send reset email'}
             </button>
 
-            <p className="text-sm text-slate-500">
-              Back to{' '}
-              <Link to="/sign-in" className="font-medium text-slate-950">
-                sign in
+            <div className="border-t border-slate-200 pt-4">
+              <Link
+                to="/sign-in"
+                className="text-[13px] font-medium underline decoration-slate-300 underline-offset-2 hover:decoration-slate-600"
+                style={{ color: 'var(--ink)' }}
+              >
+                Back to sign in
               </Link>
-            </p>
+            </div>
           </form>
-        </SurfaceCard>
+        </div>
       </div>
     </div>
   )

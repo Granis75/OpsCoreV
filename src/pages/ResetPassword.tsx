@@ -1,6 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
-import { SurfaceCard } from '../components/ui/SurfaceCard'
 import { isSupabaseConfigured, supabase } from '../lib/supabase'
 
 function hasRecoveryParams() {
@@ -30,19 +29,14 @@ export function ResetPassword() {
   const [isCheckingRecovery, setIsCheckingRecovery] = useState(Boolean(supabase))
 
   useEffect(() => {
-    if (!supabase) {
-      return
-    }
+    if (!supabase) return
 
     let isMounted = true
 
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event, session) => {
-      if (!isMounted) {
-        return
-      }
-
+      if (!isMounted) return
       if (event === 'PASSWORD_RECOVERY' || session) {
         setIsReady(true)
         setErrorMessage(null)
@@ -50,34 +44,26 @@ export function ResetPassword() {
       }
     })
 
-    void supabase.auth
-      .getSession()
-      .then(({ data: { session }, error }) => {
-        if (!isMounted) {
-          return
-        }
-
-        if (error) {
-          setErrorMessage(error.message)
-          setIsCheckingRecovery(false)
-          return
-        }
-
-        if (session) {
-          setIsReady(true)
-          setErrorMessage(null)
-          setIsCheckingRecovery(false)
-          return
-        }
-
-        if (hasRecoveryParams()) {
-          setErrorMessage('Reset link is invalid or expired. Request a new password reset email.')
-        } else {
-          setErrorMessage('Open this page from the password reset email to choose a new password.')
-        }
-
+    void supabase.auth.getSession().then(({ data: { session }, error }) => {
+      if (!isMounted) return
+      if (error) {
+        setErrorMessage(error.message)
         setIsCheckingRecovery(false)
-      })
+        return
+      }
+      if (session) {
+        setIsReady(true)
+        setErrorMessage(null)
+        setIsCheckingRecovery(false)
+        return
+      }
+      if (hasRecoveryParams()) {
+        setErrorMessage('Reset link is invalid or expired. Request a new password reset email.')
+      } else {
+        setErrorMessage('Open this page from the password reset email to choose a new password.')
+      }
+      setIsCheckingRecovery(false)
+    })
 
     return () => {
       isMounted = false
@@ -114,7 +100,7 @@ export function ResetPassword() {
     if (error) {
       setErrorMessage(error.message)
     } else {
-      setSuccessMessage('Password updated successfully. You can now continue to the app.')
+      setSuccessMessage('Password updated. You can now continue to the workspace.')
       setPassword('')
       setConfirmPassword('')
     }
@@ -123,33 +109,52 @@ export function ResetPassword() {
   }
 
   return (
-    <div className="min-h-screen bg-transparent px-5 py-10 md:px-8">
-      <div className="mx-auto flex min-h-[calc(100vh-5rem)] max-w-md items-center">
-        <SurfaceCard
-          title="Reset password"
-          description="Set a new password for your Ops Core account."
-          className="w-full"
-        >
-          <div className="mb-6 space-y-1.5">
-            <p className="eyebrow-label">
-              Ops Core V12
+    <div className="flex min-h-screen flex-col" style={{ background: 'var(--paper)' }}>
+
+      {/* Header */}
+      <header className="border-b border-slate-200 bg-white">
+        <div className="mx-auto flex max-w-[1100px] items-center justify-between px-8 py-4">
+          <Link to="/">
+            <p
+              className="font-serif text-[20px] font-semibold leading-none tracking-[-0.02em]"
+              style={{ color: 'var(--black)' }}
+            >
+              OPS
             </p>
+          </Link>
+          <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-slate-400">
+            Password recovery
+          </span>
+        </div>
+      </header>
+
+      {/* Form */}
+      <div className="flex flex-1 items-center justify-center px-6 py-16">
+        <div className="w-full max-w-sm space-y-8">
+
+          <div className="space-y-3">
+            <div className="flex items-center gap-3">
+              <div className="h-px w-6 bg-slate-300" />
+              <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-slate-500">
+                OPS — Set new password
+              </span>
+            </div>
+            <h1 className="font-serif text-2xl font-medium tracking-tight text-slate-900">
+              Reset password
+            </h1>
             <p className="text-sm leading-6 text-slate-500">
               Finish recovery and return to the operational workspace.
             </p>
           </div>
 
           {isCheckingRecovery ? (
-            <p className="text-sm text-slate-600">Checking your password reset session...</p>
+            <p className="text-sm text-slate-500">Checking your password reset session…</p>
           ) : null}
 
           {!isCheckingRecovery && !isReady && errorMessage ? (
             <div className="space-y-4">
-              <p className="text-sm text-rose-600">{errorMessage}</p>
-              <Link
-                to="/sign-in"
-                className="button-secondary"
-              >
+              <p className="text-sm" style={{ color: 'var(--danger)' }}>{errorMessage}</p>
+              <Link to="/sign-in" className="button-secondary">
                 Back to sign in
               </Link>
             </div>
@@ -157,11 +162,10 @@ export function ResetPassword() {
 
           {!isCheckingRecovery && isReady ? (
             <form className="space-y-4" onSubmit={handleSubmit}>
-              <label className="block space-y-2">
-                <span className="eyebrow-label">
-                  New password
-                </span>
+              <div className="space-y-1.5">
+                <label className="eyebrow-label" htmlFor="new-password">New password</label>
                 <input
+                  id="new-password"
                   type="password"
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}
@@ -169,13 +173,12 @@ export function ResetPassword() {
                   required
                   className="field-input"
                 />
-              </label>
+              </div>
 
-              <label className="block space-y-2">
-                <span className="eyebrow-label">
-                  Confirm password
-                </span>
+              <div className="space-y-1.5">
+                <label className="eyebrow-label" htmlFor="confirm-password">Confirm password</label>
                 <input
+                  id="confirm-password"
                   type="password"
                   value={confirmPassword}
                   onChange={(event) => setConfirmPassword(event.target.value)}
@@ -183,14 +186,14 @@ export function ResetPassword() {
                   required
                   className="field-input"
                 />
-              </label>
+              </div>
 
               {successMessage ? (
-                <p className="text-sm text-emerald-700">{successMessage}</p>
+                <p className="text-sm" style={{ color: 'var(--success)' }}>{successMessage}</p>
               ) : null}
 
               {errorMessage ? (
-                <p className="text-sm text-rose-600">{errorMessage}</p>
+                <p className="text-sm" style={{ color: 'var(--danger)' }}>{errorMessage}</p>
               ) : null}
 
               <button
@@ -198,20 +201,17 @@ export function ResetPassword() {
                 disabled={isSubmitting || !isSupabaseConfigured}
                 className="button-primary w-full"
               >
-                {isSubmitting ? 'Updating password...' : 'Update password'}
+                {isSubmitting ? 'Updating password…' : 'Update password'}
               </button>
 
               {successMessage ? (
-                <Link
-                  to="/app/vendors"
-                  className="button-secondary w-full"
-                >
-                  Continue to vendors
+                <Link to="/app/vendors" className="button-secondary w-full">
+                  Continue to workspace
                 </Link>
               ) : null}
             </form>
           ) : null}
-        </SurfaceCard>
+        </div>
       </div>
     </div>
   )
