@@ -196,9 +196,9 @@ export function HousekeepingDailyPlanner({
                 <th className="px-3 py-3 text-left font-medium text-slate-600">Apartment</th>
                 <th className="px-3 py-3 text-left font-medium text-slate-600">Service type</th>
                 <th className="px-3 py-3 text-center font-medium text-slate-600">Guests</th>
-                <th className="px-3 py-3 text-center font-medium text-slate-600">GL</th>
-                <th className="px-3 py-3 text-center font-medium text-slate-600">LS</th>
-                <th className="px-3 py-3 text-center font-medium text-slate-600">LITBB</th>
+                <th className="px-3 py-3 text-center font-medium text-slate-600" title="Double beds / grand lit">GL</th>
+                <th className="px-3 py-3 text-center font-medium text-slate-600" title="Single beds / lit simple">LS</th>
+                <th className="px-3 py-3 text-center font-medium text-slate-600" title="Baby beds">BB</th>
                 <th className="px-3 py-3 text-left font-medium text-slate-600">Priority</th>
                 <th className="px-3 py-3 text-left font-medium text-slate-600">Memo</th>
                 <th className="px-3 py-3 text-center font-medium text-slate-600">Actions</th>
@@ -277,11 +277,11 @@ export function HousekeepingDailyPlanner({
               </select>
 
               {[
-                ['guestsCount', 'Guests'],
-                ['doubleBedsGl', 'GL'],
-                ['singleBedsLs', 'LS'],
-                ['babyBedsLitbb', 'LITBB'],
-              ].map(([key, label]) => (
+                ['guestsCount', 'Guests', 'Number of guests in the apartment'],
+                ['doubleBedsGl', 'GL - Double beds', 'Double beds / grand lit'],
+                ['singleBedsLs', 'LS - Single beds', 'Single beds / lit simple'],
+                ['babyBedsLitbb', 'BB - Baby beds', 'Baby beds'],
+              ].map(([key, label, title]) => (
                 <input
                   key={key}
                   type="number"
@@ -291,6 +291,8 @@ export function HousekeepingDailyPlanner({
                     setNewEntry({ ...newEntry, [key]: parseInt(event.target.value, 10) || 0 })
                   }
                   placeholder={label}
+                  title={title}
+                  aria-label={label}
                   className="field-input"
                 />
               ))}
@@ -315,7 +317,7 @@ export function HousekeepingDailyPlanner({
                 onChange={(event) =>
                   setNewEntry({ ...newEntry, receptionMemo: event.target.value || null })
                 }
-                placeholder="Reception memo"
+                placeholder="e.g. Early arrival, baby bed required, towels requested before noon"
                 className="field-input lg:col-span-2"
               />
 

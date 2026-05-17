@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Plus, Save } from 'lucide-react'
+import { Info, Plus, Save } from 'lucide-react'
 import { SurfaceCard } from '../ui/SurfaceCard'
 import type {
   HousekeepingConfiguration,
@@ -191,9 +191,13 @@ export function HousekeepingSettingsPanel({
         <div className="flex flex-col gap-4 md:flex-row md:items-end">
           <label className="flex flex-col gap-1">
             <span className="text-xs font-medium text-slate-600">Productive minutes per cleaner</span>
+            <span className="max-w-md text-xs leading-5 text-slate-500">
+              Daily working time effectively available for room servicing. Example: 360 = 6 productive hours.
+            </span>
             <input
               type="number"
               min="1"
+              placeholder="360"
               value={productiveMinutes}
               onChange={(event) => setProductiveMinutes(parseInt(event.target.value, 10) || 0)}
               className="field-input w-72"
@@ -213,7 +217,7 @@ export function HousekeepingSettingsPanel({
 
       <SurfaceCard
         title="Intervention types"
-        description="Service types available in the Daily Planner."
+        description="Define the service types used by your team and the standard workload attached to each one."
       >
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -221,7 +225,12 @@ export function HousekeepingSettingsPanel({
               <tr className="border-b border-slate-200">
                 <th className="px-3 py-3 text-left font-medium text-slate-600">Label</th>
                 <th className="px-3 py-3 text-left font-medium text-slate-600">Category</th>
-                <th className="px-3 py-3 text-center font-medium text-slate-600">Minutes</th>
+                <th className="px-3 py-3 text-center font-medium text-slate-600">
+                  <span className="inline-flex items-center justify-center gap-1">
+                    Minutes
+                    <InfoHint text="Estimated workload in minutes for one apartment serviced under this intervention type." />
+                  </span>
+                </th>
                 <th className="px-3 py-3 text-center font-medium text-slate-600">Active</th>
                 <th className="px-3 py-3 text-center font-medium text-slate-600">Save</th>
               </tr>
@@ -271,6 +280,7 @@ export function HousekeepingSettingsPanel({
                 workloadMinutes: parseInt(event.target.value, 10) || 0,
               })}
               placeholder="Minutes"
+              title="Estimated workload in minutes for one apartment serviced under this intervention type."
               className="field-input"
             />
             <input
@@ -294,7 +304,7 @@ export function HousekeepingSettingsPanel({
 
       <SurfaceCard
         title="Items catalog"
-        description="Consumable or operational items tracked in forecasts and print sheets."
+        description="Create the items your team wants OPS to forecast and, when relevant, print on the daily preparation sheet."
       >
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -302,8 +312,8 @@ export function HousekeepingSettingsPanel({
               <tr className="border-b border-slate-200">
                 <th className="px-3 py-3 text-left font-medium text-slate-600">Label</th>
                 <th className="px-3 py-3 text-left font-medium text-slate-600">Category</th>
-                <th className="px-3 py-3 text-center font-medium text-slate-600">Print</th>
-                <th className="px-3 py-3 text-center font-medium text-slate-600">Forecast</th>
+                <th className="px-3 py-3 text-center font-medium text-slate-600">Show on printable sheet</th>
+                <th className="px-3 py-3 text-center font-medium text-slate-600">Include in forecast</th>
                 <th className="px-3 py-3 text-center font-medium text-slate-600">Active</th>
                 <th className="px-3 py-3 text-center font-medium text-slate-600">Save</th>
               </tr>
@@ -329,7 +339,7 @@ export function HousekeepingSettingsPanel({
             <input
               value={newItem.label}
               onChange={(event) => setNewItem({ ...newItem, label: event.target.value })}
-              placeholder="Label"
+              placeholder="e.g. Bathrobe, Pillowcase, Sofa bed sheet"
               className="field-input"
             />
             <input
@@ -368,6 +378,10 @@ export function HousekeepingSettingsPanel({
           <p className="text-sm text-slate-500">Create at least one service type and one item before configuring rules.</p>
         ) : (
           <div className="space-y-5">
+            <p className="max-w-3xl text-xs leading-5 text-slate-500">
+              Define how many units of each item are consumed for this service type. Example: entering 1 under GL means 1 unit is consumed for each double bed.
+            </p>
+
             <label className="flex max-w-sm flex-col gap-1">
               <span className="text-xs font-medium text-slate-600">Service type</span>
               <select
@@ -389,11 +403,11 @@ export function HousekeepingSettingsPanel({
                 <thead>
                   <tr className="border-b border-slate-200">
                     <th className="px-3 py-3 text-left font-medium text-slate-600">Item</th>
-                    <th className="px-3 py-3 text-center font-medium text-slate-600">Per apartment</th>
-                    <th className="px-3 py-3 text-center font-medium text-slate-600">Per guest</th>
-                    <th className="px-3 py-3 text-center font-medium text-slate-600">Per GL</th>
-                    <th className="px-3 py-3 text-center font-medium text-slate-600">Per LS</th>
-                    <th className="px-3 py-3 text-center font-medium text-slate-600">Per BB</th>
+                    <RuleHeader label="Apartment" hint="Quantity consumed once per serviced apartment." />
+                    <RuleHeader label="Guest" hint="Quantity consumed per guest in the apartment." />
+                    <RuleHeader label="GL" hint="Quantity consumed per double bed / grand lit." />
+                    <RuleHeader label="LS" hint="Quantity consumed per single bed / lit simple." />
+                    <RuleHeader label="BB" hint="Quantity consumed per baby bed." />
                   </tr>
                 </thead>
                 <tbody>
@@ -471,6 +485,7 @@ function InterventionTypeRow({
         <input
           value={draft.label}
           onChange={(event) => setDraft({ ...draft, label: event.target.value })}
+          placeholder="Service type name"
           className="field-input min-h-9"
         />
       </td>
@@ -491,6 +506,7 @@ function InterventionTypeRow({
           min="0"
           value={draft.workloadMinutes}
           onChange={(event) => setDraft({ ...draft, workloadMinutes: parseInt(event.target.value, 10) || 0 })}
+          title="Estimated workload in minutes for one apartment serviced under this intervention type."
           className="field-input min-h-9 text-center"
         />
       </td>
@@ -528,6 +544,7 @@ function ItemRow({
         <input
           value={draft.label}
           onChange={(event) => setDraft({ ...draft, label: event.target.value })}
+          placeholder="e.g. Bathrobe, Pillowcase, Sofa bed sheet"
           className="field-input min-h-9"
         />
       </td>
@@ -562,5 +579,29 @@ function ItemRow({
         </button>
       </td>
     </tr>
+  )
+}
+
+function RuleHeader({ label, hint }: { label: string; hint: string }) {
+  return (
+    <th className="px-3 py-3 text-center font-medium text-slate-600">
+      <span className="inline-flex items-center justify-center gap-1">
+        {label}
+        <InfoHint text={hint} />
+      </span>
+    </th>
+  )
+}
+
+function InfoHint({ text }: { text: string }) {
+  return (
+    <span
+      tabIndex={0}
+      title={text}
+      aria-label={text}
+      className="inline-flex h-4 w-4 items-center justify-center rounded-full text-slate-400 outline-none transition-colors hover:text-slate-700 focus:text-slate-700"
+    >
+      <Info className="h-3.5 w-3.5" strokeWidth={1.8} />
+    </span>
   )
 }
