@@ -10,6 +10,7 @@ import { Directory } from './pages/Directory'
 import { DirectoryStaffDetailPlaceholder } from './pages/DirectoryStaffDetailPlaceholder'
 import { Expenses } from './pages/Expenses'
 import { ForgotPassword } from './pages/ForgotPassword'
+import { Housekeeping } from './pages/Housekeeping'
 import { Landing } from './pages/Landing'
 import { Login } from './pages/Login'
 import { Maintenance } from './pages/Maintenance'
@@ -115,6 +116,7 @@ function App() {
         <Route path="teams" element={<Teams />} />
         <Route path="maintenance" element={<Maintenance />} />
         <Route path="operations" element={<Operations />} />
+        <Route path="housekeeping" element={<Housekeeping />} />
         <Route path="expenses" element={<Expenses />} />
         <Route path="reputation" element={<Reputation />} />
       </Route>

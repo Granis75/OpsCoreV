@@ -1,6 +1,7 @@
 import {
   Building2,
   CalendarDays,
+  Feather,
   LayoutDashboard,
   ReceiptText,
   Star,
@@ -45,6 +46,12 @@ export const navigationItems: NavigationItem[] = [
     to: '/app/operations',
     description: 'Calendrier leger des evenements operationnels.',
     icon: CalendarDays,
+  },
+  {
+    label: 'Housekeeping',
+    to: '/app/housekeeping',
+    description: 'Daily room servicing, linen forecasting, and staffing.',
+    icon: Feather,
   },
   {
     label: 'Expenses',
