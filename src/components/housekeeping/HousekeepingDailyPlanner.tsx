@@ -1,23 +1,18 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Plus, Trash2 } from 'lucide-react'
 import { SurfaceCard } from '../ui/SurfaceCard'
 import type {
+  HousekeepingConfiguration,
   HousekeepingDailyPlan,
   HousekeepingEntry,
-  HousekeepingSettings,
-  HousekeepingInterventionType,
   HousekeepingPriority,
 } from '../../types/housekeeping'
+import { housekeepingPriorities, priorityLabels } from '../../types/housekeeping'
 import {
-  housekeepingInterventionTypes,
-  housekeepingPriorities,
-  interventionTypeLabels,
-  priorityLabels,
-} from '../../types/housekeeping'
-import {
+  aggregateDailyItemConsumption,
   calculateWorkloadAndCleanersNeeded,
-  aggregateDailyLinenConsumption,
   countInterventionTypes,
+  getInterventionTypeLabel,
 } from '../../lib/housekeeping/calculations'
 import {
   createEntry,
@@ -28,30 +23,26 @@ import {
 interface HousekeepingDailyPlannerProps {
   dailyPlan: HousekeepingDailyPlan
   entries: HousekeepingEntry[]
-  settings: HousekeepingSettings
+  configuration: HousekeepingConfiguration
   onEntriesUpdate: (entries: HousekeepingEntry[]) => void
   onPlanUpdate: (plan: HousekeepingDailyPlan) => void
-}
-
-function parseNonNegativeInteger(value: string, fallback = 0) {
-  if (value.trim() === '') return fallback
-  const parsed = Number(value)
-  return Number.isInteger(parsed) && parsed >= 0 ? parsed : fallback
 }
 
 export function HousekeepingDailyPlanner({
   dailyPlan,
   entries,
-  settings,
+  configuration,
   onEntriesUpdate,
   onPlanUpdate,
 }: HousekeepingDailyPlannerProps) {
+  const activeInterventionTypes = configuration.interventionTypes.filter((type) => type.active)
+  const defaultInterventionTypeId = activeInterventionTypes[0]?.id ?? ''
   const [isCreating, setIsCreating] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [editingPlan, setEditingPlan] = useState(dailyPlan)
   const [newEntry, setNewEntry] = useState<Partial<HousekeepingEntry>>({
-    interventionType: 'departure',
+    interventionTypeId: defaultInterventionTypeId,
     priority: 'standard',
     guestsCount: 1,
     doubleBedsGl: 0,
@@ -61,20 +52,29 @@ export function HousekeepingDailyPlanner({
 
   const workload = calculateWorkloadAndCleanersNeeded(
     entries,
-    settings.departureMinutes,
-    settings.stayoverZMinutes,
-    settings.stayoverSMinutes,
-    settings.productiveMinutesPerCleaner,
+    configuration.interventionTypes,
+    configuration.settings.productiveMinutesPerCleaner,
   )
-  const interventionCounts = countInterventionTypes(entries)
-  const linens = aggregateDailyLinenConsumption(entries)
+  const serviceCounts = countInterventionTypes(entries, configuration.interventionTypes)
+  const itemConsumption = aggregateDailyItemConsumption(
+    entries,
+    configuration.items,
+    configuration.consumptionRules,
+  ).filter((item) => item.includeInForecast && item.quantity > 0)
   const staffingGap = editingPlan.cleanersOrdered - workload.cleanersNeeded
+
+  const selectedNewTypeId = newEntry.interventionTypeId || defaultInterventionTypeId
+  const canCreateEntries = activeInterventionTypes.length > 0
+
+  const sortedEntries = useMemo(
+    () => [...entries].sort((a, b) => a.sortOrder - b.sortOrder || a.apartmentLabel.localeCompare(b.apartmentLabel)),
+    [entries],
+  )
 
   const handleAddEntry = async () => {
     const apartmentLabel = newEntry.apartmentLabel?.trim()
-
-    if (!apartmentLabel || !newEntry.interventionType) {
-      setErrorMessage('Apartment and intervention type are required.')
+    if (!apartmentLabel || !selectedNewTypeId) {
+      setErrorMessage('Apartment and service type are required.')
       return
     }
 
@@ -85,7 +85,7 @@ export function HousekeepingDailyPlanner({
       const entryToCreate: Omit<HousekeepingEntry, 'id' | 'createdAt' | 'updatedAt'> = {
         dailyPlanId: dailyPlan.id,
         apartmentLabel,
-        interventionType: newEntry.interventionType as HousekeepingInterventionType,
+        interventionTypeId: selectedNewTypeId,
         guestsCount: newEntry.guestsCount ?? 0,
         doubleBedsGl: newEntry.doubleBedsGl ?? 0,
         singleBedsLs: newEntry.singleBedsLs ?? 0,
@@ -98,7 +98,7 @@ export function HousekeepingDailyPlanner({
       const created = await createEntry(entryToCreate)
       onEntriesUpdate([...entries, created])
       setNewEntry({
-        interventionType: 'departure',
+        interventionTypeId: defaultInterventionTypeId,
         priority: 'standard',
         guestsCount: 1,
         doubleBedsGl: 0,
@@ -121,7 +121,7 @@ export function HousekeepingDailyPlanner({
 
     try {
       await deleteEntry(entryId)
-      onEntriesUpdate(entries.filter((e) => e.id !== entryId))
+      onEntriesUpdate(entries.filter((entry) => entry.id !== entryId))
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'Failed to delete entry.')
     } finally {
@@ -169,52 +169,48 @@ export function HousekeepingDailyPlanner({
         </div>
       )}
 
-      {/* General note */}
       <SurfaceCard
         title="Daily operational note"
-        description="Add any important information for the housekeeping team."
+        description="Information that should travel with the selected service date."
       >
-        <div className="space-y-3">
-          <textarea
-            value={editingPlan.generalNote ?? ''}
-            onChange={(e) =>
-              setEditingPlan({ ...editingPlan, generalNote: e.target.value || null })
-            }
-            onBlur={handleSaveGeneralNote}
-            placeholder="e.g., VIP guests arriving late, special requests, etc."
-            rows={3}
-            className="w-full border border-slate-200 rounded-lg p-3 text-sm outline-none focus:border-slate-400"
-          />
-        </div>
+        <textarea
+          value={editingPlan.generalNote ?? ''}
+          onChange={(event) =>
+            setEditingPlan({ ...editingPlan, generalNote: event.target.value || null })
+          }
+          onBlur={handleSaveGeneralNote}
+          placeholder="VIP arrivals, blocked rooms, special instructions..."
+          rows={3}
+          className="w-full border border-slate-200 rounded-lg p-3 text-sm outline-none focus:border-slate-400"
+        />
       </SurfaceCard>
 
-      {/* Entries table */}
       <SurfaceCard
         title="Daily housekeeping entries"
-        description="Create, edit, and delete room servicing entries for this date."
+        description="Schedule room servicing against configured service types."
       >
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-slate-200">
                 <th className="px-3 py-3 text-left font-medium text-slate-600">Apartment</th>
-                <th className="px-3 py-3 text-left font-medium text-slate-600">Intervention</th>
+                <th className="px-3 py-3 text-left font-medium text-slate-600">Service type</th>
                 <th className="px-3 py-3 text-center font-medium text-slate-600">Guests</th>
                 <th className="px-3 py-3 text-center font-medium text-slate-600">GL</th>
                 <th className="px-3 py-3 text-center font-medium text-slate-600">LS</th>
-                <th className="px-3 py-3 text-center font-medium text-slate-600">BB</th>
+                <th className="px-3 py-3 text-center font-medium text-slate-600">LITBB</th>
                 <th className="px-3 py-3 text-left font-medium text-slate-600">Priority</th>
                 <th className="px-3 py-3 text-left font-medium text-slate-600">Memo</th>
                 <th className="px-3 py-3 text-center font-medium text-slate-600">Actions</th>
               </tr>
             </thead>
             <tbody>
-              {entries.map((entry) => (
+              {sortedEntries.map((entry) => (
                 <tr key={entry.id} className="border-b border-slate-100 hover:bg-slate-50">
                   <td className="px-3 py-3 font-mono text-sm font-medium">{entry.apartmentLabel}</td>
                   <td className="px-3 py-3">
                     <span className="inline-block rounded-lg bg-slate-100 px-2 py-1 text-xs font-medium">
-                      {interventionTypeLabels[entry.interventionType]}
+                      {getInterventionTypeLabel(entry.interventionTypeId, configuration.interventionTypes)}
                     </span>
                   </td>
                   <td className="px-3 py-3 text-center">{entry.guestsCount}</td>
@@ -222,23 +218,12 @@ export function HousekeepingDailyPlanner({
                   <td className="px-3 py-3 text-center">{entry.singleBedsLs}</td>
                   <td className="px-3 py-3 text-center">{entry.babyBedsLitbb}</td>
                   <td className="px-3 py-3 text-xs">
-                    <span
-                      className={[
-                        'inline-block rounded-lg px-2 py-1 font-medium',
-                        entry.priority === 'urgent'
-                          ? 'bg-red-100 text-red-700'
-                          : entry.priority === 'vip'
-                            ? 'bg-amber-100 text-amber-700'
-                            : entry.priority === 'early_arrival'
-                              ? 'bg-blue-100 text-blue-700'
-                              : 'bg-slate-100 text-slate-600',
-                      ].join(' ')}
-                    >
+                    <span className="inline-block rounded-lg bg-slate-100 px-2 py-1 font-medium text-slate-600">
                       {priorityLabels[entry.priority]}
                     </span>
                   </td>
                   <td className="px-3 py-3 text-xs text-slate-600 max-w-xs truncate">
-                    {entry.receptionMemo ? entry.receptionMemo : '—'}
+                    {entry.receptionMemo ? entry.receptionMemo : '-'}
                   </td>
                   <td className="px-3 py-3 text-center">
                     <button
@@ -263,7 +248,6 @@ export function HousekeepingDailyPlanner({
           )}
         </div>
 
-        {/* Add new entry form */}
         {isCreating && (
           <div className="mt-6 border-t border-slate-200 pt-6">
             <p className="mb-4 text-sm font-medium text-slate-900">Add new entry</p>
@@ -271,96 +255,56 @@ export function HousekeepingDailyPlanner({
               <input
                 type="text"
                 value={newEntry.apartmentLabel ?? ''}
-                onChange={(e) =>
-                  setNewEntry({ ...newEntry, apartmentLabel: e.target.value })
+                onChange={(event) =>
+                  setNewEntry({ ...newEntry, apartmentLabel: event.target.value })
                 }
-                placeholder="Apt (e.g., 101)"
+                placeholder="Apartment"
                 className="field-input"
               />
 
               <select
-                value={newEntry.interventionType ?? 'departure'}
-                onChange={(e) =>
-                  setNewEntry({
-                    ...newEntry,
-                    interventionType: e.target.value as HousekeepingInterventionType,
-                  })
+                value={selectedNewTypeId}
+                onChange={(event) =>
+                  setNewEntry({ ...newEntry, interventionTypeId: event.target.value })
                 }
                 className="field-input"
               >
-                {housekeepingInterventionTypes.map((type) => (
-                  <option key={type} value={type}>
-                    {interventionTypeLabels[type]}
+                {activeInterventionTypes.map((type) => (
+                  <option key={type.id} value={type.id}>
+                    {type.label}
                   </option>
                 ))}
               </select>
 
-              <input
-                type="number"
-                min="0"
-                value={newEntry.guestsCount ?? 1}
-                onChange={(e) =>
-                  setNewEntry({
-                    ...newEntry,
-                    guestsCount: parseNonNegativeInteger(e.target.value, 0),
-                  })
-                }
-                placeholder="Guests"
-                className="field-input"
-              />
-
-              <input
-                type="number"
-                min="0"
-                value={newEntry.doubleBedsGl ?? 0}
-                onChange={(e) =>
-                  setNewEntry({
-                    ...newEntry,
-                    doubleBedsGl: parseNonNegativeInteger(e.target.value, 0),
-                  })
-                }
-                placeholder="GL"
-                className="field-input"
-              />
-
-              <input
-                type="number"
-                min="0"
-                value={newEntry.singleBedsLs ?? 0}
-                onChange={(e) =>
-                  setNewEntry({
-                    ...newEntry,
-                    singleBedsLs: parseNonNegativeInteger(e.target.value, 0),
-                  })
-                }
-                placeholder="LS"
-                className="field-input"
-              />
-
-              <input
-                type="number"
-                min="0"
-                value={newEntry.babyBedsLitbb ?? 0}
-                onChange={(e) =>
-                  setNewEntry({
-                    ...newEntry,
-                    babyBedsLitbb: parseNonNegativeInteger(e.target.value, 0),
-                  })
-                }
-                placeholder="BB"
-                className="field-input"
-              />
+              {[
+                ['guestsCount', 'Guests'],
+                ['doubleBedsGl', 'GL'],
+                ['singleBedsLs', 'LS'],
+                ['babyBedsLitbb', 'LITBB'],
+              ].map(([key, label]) => (
+                <input
+                  key={key}
+                  type="number"
+                  min="0"
+                  value={(newEntry[key as keyof HousekeepingEntry] as number | undefined) ?? 0}
+                  onChange={(event) =>
+                    setNewEntry({ ...newEntry, [key]: parseInt(event.target.value, 10) || 0 })
+                  }
+                  placeholder={label}
+                  className="field-input"
+                />
+              ))}
 
               <select
                 value={newEntry.priority ?? 'standard'}
-                onChange={(e) =>
-                  setNewEntry({ ...newEntry, priority: e.target.value as HousekeepingPriority })
+                onChange={(event) =>
+                  setNewEntry({ ...newEntry, priority: event.target.value as HousekeepingPriority })
                 }
                 className="field-input"
               >
-                {housekeepingPriorities.map((p) => (
-                  <option key={p} value={p}>
-                    {priorityLabels[p]}
+                {housekeepingPriorities.map((priority) => (
+                  <option key={priority} value={priority}>
+                    {priorityLabels[priority]}
                   </option>
                 ))}
               </select>
@@ -368,8 +312,8 @@ export function HousekeepingDailyPlanner({
               <input
                 type="text"
                 value={newEntry.receptionMemo ?? ''}
-                onChange={(e) =>
-                  setNewEntry({ ...newEntry, receptionMemo: e.target.value || null })
+                onChange={(event) =>
+                  setNewEntry({ ...newEntry, receptionMemo: event.target.value || null })
                 }
                 placeholder="Reception memo"
                 className="field-input lg:col-span-2"
@@ -379,7 +323,7 @@ export function HousekeepingDailyPlanner({
                 <button
                   type="button"
                   onClick={handleAddEntry}
-                  disabled={isSaving}
+                  disabled={isSaving || !canCreateEntries}
                   className="button-primary gap-1 flex-1"
                 >
                   <Plus className="h-3 w-3" />
@@ -402,43 +346,37 @@ export function HousekeepingDailyPlanner({
             <button
               type="button"
               onClick={() => setIsCreating(true)}
+              disabled={!canCreateEntries}
               className="button-secondary gap-2"
             >
               <Plus className="h-3.5 w-3.5" />
               Add entry
             </button>
+            {!canCreateEntries ? (
+              <p className="mt-3 text-sm text-amber-700">Create an active service type in Settings before adding entries.</p>
+            ) : null}
           </div>
         )}
       </SurfaceCard>
 
-      {/* Summary panel */}
       <SurfaceCard
         title="Daily plan summary"
-        description="Live calculation of workload and linen requirements."
+        description="Live calculation from configured service types and item rules."
       >
         <div className="grid gap-6 md:grid-cols-2">
-          {/* Summary stats */}
           <div>
-            <p className="text-xs font-mono text-slate-600 uppercase tracking-widest mb-4">
-              Summary
-            </p>
+            <p className="text-xs font-mono text-slate-600 uppercase tracking-widest mb-4">Summary</p>
             <div className="space-y-3">
               <div className="flex items-center justify-between text-sm">
                 <span className="text-slate-600">Total interventions</span>
                 <span className="font-mono font-medium">{entries.length}</span>
               </div>
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-slate-600">Departures</span>
-                <span className="font-mono font-medium">{interventionCounts.departure}</span>
-              </div>
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-slate-600">Stayover Z</span>
-                <span className="font-mono font-medium">{interventionCounts.stayover_z}</span>
-              </div>
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-slate-600">Stayover S</span>
-                <span className="font-mono font-medium">{interventionCounts.stayover_s}</span>
-              </div>
+              {serviceCounts.filter((service) => service.count > 0).map((service) => (
+                <div key={service.interventionTypeId} className="flex items-center justify-between text-sm">
+                  <span className="text-slate-600">{service.label}</span>
+                  <span className="font-mono font-medium">{service.count}</span>
+                </div>
+              ))}
               <div className="flex items-center justify-between text-sm border-t border-slate-200 pt-3">
                 <span className="text-slate-600 font-medium">Total workload</span>
                 <span className="font-mono font-semibold">{workload.totalMinutes} min</span>
@@ -446,11 +384,8 @@ export function HousekeepingDailyPlanner({
             </div>
           </div>
 
-          {/* Staffing */}
           <div>
-            <p className="text-xs font-mono text-slate-600 uppercase tracking-widest mb-4">
-              Staffing
-            </p>
+            <p className="text-xs font-mono text-slate-600 uppercase tracking-widest mb-4">Staffing</p>
             <div className="space-y-3">
               <div className="flex items-center justify-between text-sm">
                 <span className="text-slate-600">Cleaners needed</span>
@@ -463,10 +398,10 @@ export function HousekeepingDailyPlanner({
                   type="number"
                   min="0"
                   value={editingPlan.cleanersOrdered}
-                  onChange={(e) =>
+                  onChange={(event) =>
                     setEditingPlan({
                       ...editingPlan,
-                      cleanersOrdered: parseNonNegativeInteger(e.target.value, 0),
+                      cleanersOrdered: parseInt(event.target.value, 10) || 0,
                     })
                   }
                   onBlur={handleSaveCleanersOrdered}
@@ -476,16 +411,7 @@ export function HousekeepingDailyPlanner({
 
               <div className="flex items-center justify-between text-sm pt-3 border-t border-slate-200">
                 <span className="text-slate-600 font-medium">Staffing gap</span>
-                <span
-                  className={[
-                    'font-mono font-semibold text-lg',
-                    staffingGap < 0
-                      ? 'text-red-600'
-                      : staffingGap > 0
-                        ? 'text-emerald-600'
-                        : 'text-slate-600',
-                  ].join(' ')}
-                >
+                <span className="font-mono font-semibold text-lg">
                   {staffingGap > 0 ? '+' : ''}{staffingGap}
                 </span>
               </div>
@@ -493,49 +419,20 @@ export function HousekeepingDailyPlanner({
           </div>
         </div>
 
-        {/* Compact linen forecast */}
         <div className="mt-6 border-t border-slate-200 pt-6">
-          <p className="text-xs font-mono text-slate-600 uppercase tracking-widest mb-3">
-            Linen forecast
-          </p>
-          <div className="grid gap-2 grid-cols-2 md:grid-cols-3 text-xs">
-            <div className="flex justify-between">
-              <span className="text-slate-600">Lg sheets</span>
-              <span className="font-mono font-medium">{linens.largeSheets}</span>
+          <p className="text-xs font-mono text-slate-600 uppercase tracking-widest mb-3">Items forecast</p>
+          {itemConsumption.length === 0 ? (
+            <p className="text-sm text-slate-500">No configured item consumption for this plan.</p>
+          ) : (
+            <div className="grid gap-2 grid-cols-2 md:grid-cols-3 text-xs">
+              {itemConsumption.slice(0, 12).map((item) => (
+                <div key={item.itemId} className="flex justify-between">
+                  <span className="text-slate-600">{item.itemLabel}</span>
+                  <span className="font-mono font-medium">{item.quantity}</span>
+                </div>
+              ))}
             </div>
-            <div className="flex justify-between">
-              <span className="text-slate-600">Lg duvets</span>
-              <span className="font-mono font-medium">{linens.largeDuvetCovers}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-slate-600">Sm sheets</span>
-              <span className="font-mono font-medium">{linens.smallSheets}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-slate-600">Sm duvets</span>
-              <span className="font-mono font-medium">{linens.smallDuvetCovers}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-slate-600">Pillows</span>
-              <span className="font-mono font-medium">{linens.pillowcases}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-slate-600">Towels (L)</span>
-              <span className="font-mono font-medium">{linens.largeTowels}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-slate-600">Towels (S)</span>
-              <span className="font-mono font-medium">{linens.smallTowels}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-slate-600">Kitchen</span>
-              <span className="font-mono font-medium">{linens.kitchenTowels}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-slate-600">Bath mats</span>
-              <span className="font-mono font-medium">{linens.bathMats}</span>
-            </div>
-          </div>
+          )}
         </div>
       </SurfaceCard>
     </div>

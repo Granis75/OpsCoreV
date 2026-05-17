@@ -1,13 +1,18 @@
 import type {
+  HousekeepingConfiguration,
   HousekeepingDailyPlan,
   HousekeepingEntry,
 } from '../../types/housekeeping'
-import { aggregateDailyLinenConsumption, countInterventionTypes } from '../../lib/housekeeping/calculations'
-import { interventionTypeLabels } from '../../types/housekeeping'
+import {
+  aggregateDailyItemConsumption,
+  countInterventionTypes,
+  getInterventionTypeLabel,
+} from '../../lib/housekeeping/calculations'
 
 interface HousekeepingPrintSheetProps {
   dailyPlan: HousekeepingDailyPlan
   entries: HousekeepingEntry[]
+  configuration: HousekeepingConfiguration
 }
 
 function formatDateOnly(value: string) {
@@ -29,22 +34,17 @@ function formatPrintedAt() {
 export function HousekeepingPrintSheet({
   dailyPlan,
   entries,
+  configuration,
 }: HousekeepingPrintSheetProps) {
-  const interventionCounts = countInterventionTypes(entries)
-  const linens = aggregateDailyLinenConsumption(entries)
+  const serviceCounts = countInterventionTypes(entries, configuration.interventionTypes)
+    .filter((service) => service.count > 0)
+  const itemsToPrepare = aggregateDailyItemConsumption(
+    entries,
+    configuration.items,
+    configuration.consumptionRules,
+  ).filter((item) => item.includeInPrint && item.quantity > 0)
   const formattedDate = formatDateOnly(dailyPlan.serviceDate)
   const printedAt = formatPrintedAt()
-  const linenRows = [
-    ['Large sheets', linens.largeSheets],
-    ['Large duvet covers', linens.largeDuvetCovers],
-    ['Small sheets', linens.smallSheets],
-    ['Small duvet covers', linens.smallDuvetCovers],
-    ['Pillowcases', linens.pillowcases],
-    ['Large towels', linens.largeTowels],
-    ['Small towels', linens.smallTowels],
-    ['Kitchen towels', linens.kitchenTowels],
-    ['Bath mats', linens.bathMats],
-  ] as const
 
   return (
     <>
@@ -65,7 +65,7 @@ export function HousekeepingPrintSheet({
             <div className="flex items-start justify-between gap-6">
               <div>
                 <p className="text-xs font-mono font-semibold uppercase tracking-widest text-slate-600">
-                  OpsCore Housekeeping
+                  OPS Housekeeping Sheet
                 </p>
                 <h1 className="mt-1 text-2xl font-serif font-bold text-slate-900">
                   Gouvernante Sheet
@@ -83,17 +83,10 @@ export function HousekeepingPrintSheet({
             </div>
 
             <div className="mt-4 grid grid-cols-5 gap-2 text-xs">
-              {[
-                ['Apartments', entries.length],
-                ['Departures', interventionCounts.departure],
-                ['Stayover Z', interventionCounts.stayover_z],
-                ['Stayover S', interventionCounts.stayover_s],
-                ['Cleaners', dailyPlan.cleanersOrdered],
-              ].map(([label, value]) => (
-                <div key={label} className="border border-slate-300 px-2 py-1.5">
-                  <p className="font-mono text-[10px] uppercase text-slate-500">{label}</p>
-                  <p className="text-lg font-semibold leading-tight">{value}</p>
-                </div>
+              <SummaryBox label="Apartments" value={entries.length} />
+              <SummaryBox label="Cleaners" value={dailyPlan.cleanersOrdered} />
+              {serviceCounts.slice(0, 3).map((service) => (
+                <SummaryBox key={service.interventionTypeId} label={service.label} value={service.count} />
               ))}
             </div>
 
@@ -111,7 +104,7 @@ export function HousekeepingPrintSheet({
                 <tr>
                   <th className="w-[3%] border border-slate-400 px-1.5 py-1.5 text-center font-semibold">#</th>
                   <th className="w-[9%] border border-slate-400 px-1.5 py-1.5 text-left font-semibold">Apartment</th>
-                  <th className="w-[12%] border border-slate-400 px-1.5 py-1.5 text-left font-semibold">Type</th>
+                  <th className="w-[14%] border border-slate-400 px-1.5 py-1.5 text-left font-semibold">Service</th>
                   <th className="w-[5%] border border-slate-400 px-1.5 py-1.5 text-center font-semibold">PX</th>
                   <th className="w-[5%] border border-slate-400 px-1.5 py-1.5 text-center font-semibold">GL</th>
                   <th className="w-[5%] border border-slate-400 px-1.5 py-1.5 text-center font-semibold">LS</th>
@@ -126,7 +119,9 @@ export function HousekeepingPrintSheet({
                   <tr key={entry.id}>
                     <td className="border border-slate-400 px-1.5 py-2 text-center font-mono">{index + 1}</td>
                     <td className="border border-slate-400 px-1.5 py-2 font-mono font-semibold">{entry.apartmentLabel}</td>
-                    <td className="border border-slate-400 px-1.5 py-2">{interventionTypeLabels[entry.interventionType]}</td>
+                    <td className="border border-slate-400 px-1.5 py-2">
+                      {getInterventionTypeLabel(entry.interventionTypeId, configuration.interventionTypes)}
+                    </td>
                     <td className="border border-slate-400 px-1.5 py-2 text-center">{entry.guestsCount}</td>
                     <td className="border border-slate-400 px-1.5 py-2 text-center">{entry.doubleBedsGl}</td>
                     <td className="border border-slate-400 px-1.5 py-2 text-center">{entry.singleBedsLs}</td>
@@ -142,27 +137,36 @@ export function HousekeepingPrintSheet({
 
           <div className="linen-print-block border-t-2 border-slate-900 pt-3">
             <h2 className="mb-2 text-base font-serif font-bold text-slate-900">
-              Linen to Prepare
+              Items to Prepare
             </h2>
 
-            <table className="linen-print-table w-full border-collapse text-xs">
-              <tbody>
-                {linenRows.map(([label, value]) => (
-                  <tr key={label}>
-                    <td className="border border-slate-400 px-2 py-1.5 font-medium">{label}</td>
-                    <td className="border border-slate-400 px-2 py-1.5 text-right font-mono font-semibold">{value}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          <div className="print-footer mt-4 border-t border-slate-300 pt-2 text-[10px] text-slate-500">
-            <p>OpsCore Housekeeping - GL/LS linen counted for departures and Stayover Z. LITBB is informational.</p>
+            {itemsToPrepare.length === 0 ? (
+              <p className="text-xs text-slate-500">No configured items to prepare.</p>
+            ) : (
+              <table className="linen-print-table w-full border-collapse text-xs">
+                <tbody>
+                  {itemsToPrepare.map((item) => (
+                    <tr key={item.itemId}>
+                      <td className="border border-slate-400 px-2 py-1.5 font-medium">{item.itemLabel}</td>
+                      <td className="border border-slate-400 px-2 py-1.5 text-right font-mono font-semibold">{item.quantity}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
           </div>
         </div>
       </div>
     </>
+  )
+}
+
+function SummaryBox({ label, value }: { label: string; value: string | number }) {
+  return (
+    <div className="border border-slate-300 px-2 py-1.5">
+      <p className="font-mono text-[10px] uppercase text-slate-500">{label}</p>
+      <p className="text-lg font-semibold leading-tight">{value}</p>
+    </div>
   )
 }
 
@@ -238,11 +242,6 @@ const printStyles = `
 
     .linen-print-block {
       break-inside: avoid;
-    }
-
-    .linen-print-table {
-      table-layout: fixed;
-      max-width: 100%;
     }
 
     .linen-print-table tbody {

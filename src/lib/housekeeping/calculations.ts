@@ -1,119 +1,117 @@
 import type {
+  DailyConsumptionSummary,
+  HousekeepingConsumptionRule,
   HousekeepingEntry,
   HousekeepingInterventionType,
-  LinenConsumption,
+  HousekeepingItem,
+  ItemConsumptionResult,
+  ServiceCount,
   WorkloadCalculation,
 } from '../../types/housekeeping'
 
-/**
- * Calculate linen consumption for a single housekeeping entry
- * based on the intervention type and room/guest configuration.
- */
-export function calculateEntryLinenConsumption(
-  entry: HousekeepingEntry,
-): LinenConsumption {
-  const guestsCount = Math.max(0, entry.guestsCount)
-  const doubleBedsGl = Math.max(0, entry.doubleBedsGl)
-  const singleBedsLs = Math.max(0, entry.singleBedsLs)
-
-  const consumption: LinenConsumption = {
-    largeSheets: 0,
-    largeDuvetCovers: 0,
-    smallSheets: 0,
-    smallDuvetCovers: 0,
-    pillowcases: 0,
-    largeTowels: 0,
-    smallTowels: 0,
-    kitchenTowels: 0,
-    bathMats: 0,
-  }
-
-  if (entry.interventionType === 'departure' || entry.interventionType === 'stayover_z') {
-    // Full linen changes
-    consumption.largeSheets = doubleBedsGl
-    consumption.largeDuvetCovers = doubleBedsGl
-    consumption.smallSheets = singleBedsLs
-    consumption.smallDuvetCovers = singleBedsLs
-
-    consumption.pillowcases = guestsCount * 2
-    consumption.largeTowels = guestsCount
-    consumption.smallTowels = guestsCount
-
-    consumption.kitchenTowels = 1
-    consumption.bathMats = 1
-  } else if (entry.interventionType === 'stayover_s') {
-    // Towels only
-    consumption.largeTowels = guestsCount
-    consumption.smallTowels = guestsCount
-  }
-
-  return consumption
+function sortBySortOrder<T extends { sortOrder: number; label?: string }>(items: T[]) {
+  return [...items].sort((a, b) => {
+    if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder
+    return (a.label ?? '').localeCompare(b.label ?? '')
+  })
 }
 
-/**
- * Aggregate linen consumption across multiple entries.
- */
-export function aggregateDailyLinenConsumption(
+function calculateRuleQuantity(entry: HousekeepingEntry, rule: HousekeepingConsumptionRule) {
+  return (
+    rule.quantityPerApartment +
+    rule.quantityPerGuest * entry.guestsCount +
+    rule.quantityPerGl * entry.doubleBedsGl +
+    rule.quantityPerLs * entry.singleBedsLs +
+    rule.quantityPerLitbb * entry.babyBedsLitbb
+  )
+}
+
+export function calculateEntryItemConsumption(
+  entry: HousekeepingEntry,
+  items: HousekeepingItem[],
+  rules: HousekeepingConsumptionRule[],
+): DailyConsumptionSummary {
+  const activeItems = sortBySortOrder(items.filter((item) => item.active))
+  const rulesForType = rules.filter((rule) => rule.interventionTypeId === entry.interventionTypeId)
+
+  return activeItems.map((item): ItemConsumptionResult => {
+    const itemRules = rulesForType.filter((rule) => rule.itemId === item.id)
+    const quantity = itemRules.reduce((sum, rule) => sum + calculateRuleQuantity(entry, rule), 0)
+
+    return {
+      itemId: item.id,
+      itemCode: item.code,
+      itemLabel: item.label,
+      quantity,
+      category: item.category,
+      unitLabel: item.unitLabel,
+      includeInPrint: item.includeInPrint,
+      includeInForecast: item.includeInForecast,
+      sortOrder: item.sortOrder,
+    }
+  })
+}
+
+export function aggregateDailyItemConsumption(
   entries: HousekeepingEntry[],
-): LinenConsumption {
-  const totals: LinenConsumption = {
-    largeSheets: 0,
-    largeDuvetCovers: 0,
-    smallSheets: 0,
-    smallDuvetCovers: 0,
-    pillowcases: 0,
-    largeTowels: 0,
-    smallTowels: 0,
-    kitchenTowels: 0,
-    bathMats: 0,
+  items: HousekeepingItem[],
+  rules: HousekeepingConsumptionRule[],
+): DailyConsumptionSummary {
+  const activeItems = sortBySortOrder(items.filter((item) => item.active))
+  const totals = new Map<string, ItemConsumptionResult>()
+
+  for (const item of activeItems) {
+    totals.set(item.id, {
+      itemId: item.id,
+      itemCode: item.code,
+      itemLabel: item.label,
+      quantity: 0,
+      category: item.category,
+      unitLabel: item.unitLabel,
+      includeInPrint: item.includeInPrint,
+      includeInForecast: item.includeInForecast,
+      sortOrder: item.sortOrder,
+    })
   }
 
   for (const entry of entries) {
-    const consumption = calculateEntryLinenConsumption(entry)
-
-    totals.largeSheets += consumption.largeSheets
-    totals.largeDuvetCovers += consumption.largeDuvetCovers
-    totals.smallSheets += consumption.smallSheets
-    totals.smallDuvetCovers += consumption.smallDuvetCovers
-    totals.pillowcases += consumption.pillowcases
-    totals.largeTowels += consumption.largeTowels
-    totals.smallTowels += consumption.smallTowels
-    totals.kitchenTowels += consumption.kitchenTowels
-    totals.bathMats += consumption.bathMats
+    for (const consumption of calculateEntryItemConsumption(entry, activeItems, rules)) {
+      const current = totals.get(consumption.itemId)
+      if (current) {
+        current.quantity += consumption.quantity
+      }
+    }
   }
 
-  return totals
+  return sortBySortOrder(Array.from(totals.values()).map((item) => ({ ...item, label: item.itemLabel })))
 }
 
-/**
- * Calculate workload minutes for a single entry.
- */
+export function getTotalItemUnits(items: DailyConsumptionSummary, filter?: 'forecast' | 'print') {
+  return items.reduce((sum, item) => {
+    if (filter === 'forecast' && !item.includeInForecast) return sum
+    if (filter === 'print' && !item.includeInPrint) return sum
+    return sum + item.quantity
+  }, 0)
+}
+
 export function calculateEntryWorkloadMinutes(
   entry: HousekeepingEntry,
-  workloadMinutes: Record<HousekeepingInterventionType, number>,
+  interventionTypes: HousekeepingInterventionType[],
 ): number {
-  return workloadMinutes[entry.interventionType] ?? 0
+  const interventionType = interventionTypes.find((type) => type.id === entry.interventionTypeId)
+  return interventionType?.workloadMinutes ?? 0
 }
 
-/**
- * Aggregate workload minutes across multiple entries.
- */
 export function aggregateDailyWorkloadMinutes(
   entries: HousekeepingEntry[],
-  workloadMinutes: Record<HousekeepingInterventionType, number>,
+  interventionTypes: HousekeepingInterventionType[],
 ): number {
-  let total = 0
-
-  for (const entry of entries) {
-    total += calculateEntryWorkloadMinutes(entry, workloadMinutes)
-  }
-
-  return total
+  return entries.reduce(
+    (total, entry) => total + calculateEntryWorkloadMinutes(entry, interventionTypes),
+    0,
+  )
 }
 
-/**
- * Calculate cleaners needed based on total workload minutes.
- */
 export function calculateCleanersNeeded(
   totalMinutes: number,
   productiveMinutesPerCleaner: number,
@@ -122,23 +120,12 @@ export function calculateCleanersNeeded(
   return Math.ceil(totalMinutes / productiveMinutesPerCleaner)
 }
 
-/**
- * Calculate workload for all entries and return cleaners needed.
- */
 export function calculateWorkloadAndCleanersNeeded(
   entries: HousekeepingEntry[],
-  departureMinutes: number,
-  stayoverZMinutes: number,
-  stayoverSMinutes: number,
+  interventionTypes: HousekeepingInterventionType[],
   productiveMinutesPerCleaner: number,
 ): WorkloadCalculation {
-  const workloadMinutes = {
-    departure: departureMinutes,
-    stayover_z: stayoverZMinutes,
-    stayover_s: stayoverSMinutes,
-  }
-
-  const totalMinutes = aggregateDailyWorkloadMinutes(entries, workloadMinutes)
+  const totalMinutes = aggregateDailyWorkloadMinutes(entries, interventionTypes)
   const cleanersNeeded = calculateCleanersNeeded(totalMinutes, productiveMinutesPerCleaner)
 
   return {
@@ -147,36 +134,28 @@ export function calculateWorkloadAndCleanersNeeded(
   }
 }
 
-/**
- * Count intervention types in entries.
- */
-export function countInterventionTypes(entries: HousekeepingEntry[]) {
-  const counts = {
-    departure: 0,
-    stayover_z: 0,
-    stayover_s: 0,
-  }
+export function countInterventionTypes(
+  entries: HousekeepingEntry[],
+  interventionTypes: HousekeepingInterventionType[],
+): ServiceCount[] {
+  const counts = new Map<string, number>()
 
   for (const entry of entries) {
-    counts[entry.interventionType]++
+    counts.set(entry.interventionTypeId, (counts.get(entry.interventionTypeId) ?? 0) + 1)
   }
 
-  return counts
+  return sortBySortOrder(interventionTypes).map((type) => ({
+    interventionTypeId: type.id,
+    code: type.code,
+    label: type.label,
+    count: counts.get(type.id) ?? 0,
+    workloadMinutes: type.workloadMinutes,
+  }))
 }
 
-/**
- * Get total linen units count (sum of all items).
- */
-export function getTotalLinenUnits(linen: LinenConsumption): number {
-  return (
-    linen.largeSheets +
-    linen.largeDuvetCovers +
-    linen.smallSheets +
-    linen.smallDuvetCovers +
-    linen.pillowcases +
-    linen.largeTowels +
-    linen.smallTowels +
-    linen.kitchenTowels +
-    linen.bathMats
-  )
+export function getInterventionTypeLabel(
+  interventionTypeId: string,
+  interventionTypes: HousekeepingInterventionType[],
+) {
+  return interventionTypes.find((type) => type.id === interventionTypeId)?.label ?? 'Service'
 }

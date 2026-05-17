@@ -1,21 +1,21 @@
 import { AlertCircle } from 'lucide-react'
 import { SurfaceCard } from '../ui/SurfaceCard'
 import type {
+  HousekeepingConfiguration,
   HousekeepingDailyPlan,
   HousekeepingEntry,
-  HousekeepingSettings,
 } from '../../types/housekeeping'
 import {
-  aggregateDailyLinenConsumption,
+  aggregateDailyItemConsumption,
   calculateWorkloadAndCleanersNeeded,
   countInterventionTypes,
-  getTotalLinenUnits,
+  getTotalItemUnits,
 } from '../../lib/housekeeping/calculations'
 
 interface HousekeepingOverviewProps {
   dailyPlan: HousekeepingDailyPlan
   entries: HousekeepingEntry[]
-  settings: HousekeepingSettings
+  configuration: HousekeepingConfiguration
   onOpenPlanner: () => void
   onPrintSheet: () => void
 }
@@ -23,31 +23,32 @@ interface HousekeepingOverviewProps {
 export function HousekeepingOverview({
   dailyPlan,
   entries,
-  settings,
+  configuration,
   onOpenPlanner,
   onPrintSheet,
 }: HousekeepingOverviewProps) {
-  const interventionCounts = countInterventionTypes(entries)
+  const serviceCounts = countInterventionTypes(entries, configuration.interventionTypes)
+  const usedServiceCounts = serviceCounts.filter((service) => service.count > 0)
   const workload = calculateWorkloadAndCleanersNeeded(
     entries,
-    settings.departureMinutes,
-    settings.stayoverZMinutes,
-    settings.stayoverSMinutes,
-    settings.productiveMinutesPerCleaner,
+    configuration.interventionTypes,
+    configuration.settings.productiveMinutesPerCleaner,
   )
-  const linens = aggregateDailyLinenConsumption(entries)
-  const totalLinenUnits = getTotalLinenUnits(linens)
+  const itemConsumption = aggregateDailyItemConsumption(
+    entries,
+    configuration.items,
+    configuration.consumptionRules,
+  )
+  const forecastItems = itemConsumption.filter((item) => item.includeInForecast && item.quantity > 0)
+  const totalItemUnits = getTotalItemUnits(itemConsumption, 'forecast')
   const staffingGap = dailyPlan.cleanersOrdered - workload.cleanersNeeded
-
-  // Alerts
   const hasCleanerShortage = staffingGap < 0
   const noApartmentsScheduled = entries.length === 0
-  const highLinenVolume = totalLinenUnits > 40 // Configurable threshold
-  const hasMemos = entries.some((e) => e.receptionMemo)
+  const highItemVolume = totalItemUnits > 40
+  const hasMemos = entries.some((entry) => entry.receptionMemo)
 
   return (
     <div className="space-y-8">
-      {/* Action buttons */}
       <div className="flex gap-3 flex-wrap">
         <button type="button" onClick={onOpenPlanner} className="button-primary gap-2">
           Open Daily Planner
@@ -57,8 +58,7 @@ export function HousekeepingOverview({
         </button>
       </div>
 
-      {/* Alerts */}
-      {(hasCleanerShortage || noApartmentsScheduled || highLinenVolume || hasMemos) && (
+      {(hasCleanerShortage || noApartmentsScheduled || highItemVolume || hasMemos) && (
         <div className="space-y-2">
           {noApartmentsScheduled && (
             <div className="flex gap-3 rounded-lg border border-amber-200 bg-amber-50 p-3">
@@ -70,15 +70,15 @@ export function HousekeepingOverview({
             <div className="flex gap-3 rounded-lg border border-red-200 bg-red-50 p-3">
               <AlertCircle className="h-4 w-4 shrink-0 text-red-600 mt-0.5" />
               <p className="text-sm text-red-700">
-                Cleaner shortage detected for the selected date ({workload.cleanersNeeded} needed, {dailyPlan.cleanersOrdered} ordered).
+                Cleaner shortage detected ({workload.cleanersNeeded} needed, {dailyPlan.cleanersOrdered} ordered).
               </p>
             </div>
           )}
-          {highLinenVolume && (
+          {highItemVolume && (
             <div className="flex gap-3 rounded-lg border border-amber-200 bg-amber-50 p-3">
               <AlertCircle className="h-4 w-4 shrink-0 text-amber-600 mt-0.5" />
               <p className="text-sm text-amber-700">
-                High linen volume expected today ({totalLinenUnits} units).
+                High tracked-item volume expected today ({totalItemUnits} units).
               </p>
             </div>
           )}
@@ -86,22 +86,15 @@ export function HousekeepingOverview({
             <div className="flex gap-3 rounded-lg border border-blue-200 bg-blue-50 p-3">
               <AlertCircle className="h-4 w-4 shrink-0 text-blue-600 mt-0.5" />
               <p className="text-sm text-blue-700">
-                Several apartments contain reception memos.
+                Some apartments contain reception memos.
               </p>
             </div>
           )}
         </div>
       )}
 
-      {/* KPI Cards */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <KPICard label="Apartments scheduled" value={entries.length} />
-        <KPICard label="Departures" value={interventionCounts.departure} />
-        <KPICard label="Stayovers Z" value={interventionCounts.stayover_z} />
-        <KPICard label="Stayovers S" value={interventionCounts.stayover_s} />
-      </div>
-
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <KPICard label="Cleaners needed" value={workload.cleanersNeeded} />
         <KPICard label="Cleaners ordered" value={dailyPlan.cleanersOrdered} />
         <KPICard
@@ -109,87 +102,70 @@ export function HousekeepingOverview({
           value={staffingGap}
           variant={staffingGap < 0 ? 'negative' : staffingGap > 0 ? 'positive' : 'neutral'}
         />
-        <KPICard label="Linen units" value={totalLinenUnits} />
       </div>
 
-      {/* Workload split */}
       <SurfaceCard
-        title="Workload breakdown"
-        description="Distribution of cleaning interventions and total productive minutes."
+        title="Service breakdown"
+        description="Configured service types scheduled for the selected date."
       >
-        <div className="grid gap-4 md:grid-cols-2">
-          <div>
-            <p className="text-xs font-mono text-slate-600 uppercase tracking-widest mb-3">
-              Interventions
-            </p>
-            <div className="space-y-2">
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-slate-700">Departures</span>
-                <span className="font-mono font-medium">{interventionCounts.departure}</span>
+        {usedServiceCounts.length === 0 ? (
+          <p className="text-sm text-slate-500">No service types scheduled yet.</p>
+        ) : (
+          <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
+            {usedServiceCounts.map((service) => (
+              <div key={service.interventionTypeId} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                <p className="text-sm font-medium text-slate-900">{service.label}</p>
+                <p className="mt-2 font-serif text-3xl font-semibold text-slate-900">{service.count}</p>
+                <p className="mt-1 text-xs text-slate-500">{service.workloadMinutes} min each</p>
               </div>
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-slate-700">Stayovers Z</span>
-                <span className="font-mono font-medium">{interventionCounts.stayover_z}</span>
-              </div>
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-slate-700">Stayovers S</span>
-                <span className="font-mono font-medium">{interventionCounts.stayover_s}</span>
-              </div>
-            </div>
+            ))}
           </div>
-
-          <div>
-            <p className="text-xs font-mono text-slate-600 uppercase tracking-widest mb-3">
-              Workload
-            </p>
-            <div className="space-y-2">
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-slate-700">Total minutes</span>
-                <span className="font-mono font-medium">{workload.totalMinutes}</span>
-              </div>
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-slate-700">Per cleaner</span>
-                <span className="font-mono font-medium">{settings.productiveMinutesPerCleaner}</span>
-              </div>
-              <div className="flex items-center justify-between text-sm pt-2 border-t border-slate-200">
-                <span className="text-slate-700 font-medium">Cleaners needed</span>
-                <span className="font-mono font-semibold text-lg">
-                  {workload.cleanersNeeded}
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
+        )}
       </SurfaceCard>
 
-      {/* Linen summary */}
-      <SurfaceCard
-        title="Today's linen forecast"
-        description="Expected linen consumption based on scheduled interventions."
-      >
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <tbody>
-              {[
-                ['Large sheets', linens.largeSheets],
-                ['Large duvet covers', linens.largeDuvetCovers],
-                ['Small sheets', linens.smallSheets],
-                ['Small duvet covers', linens.smallDuvetCovers],
-                ['Pillowcases', linens.pillowcases],
-                ['Large towels', linens.largeTowels],
-                ['Small towels', linens.smallTowels],
-                ['Kitchen towels', linens.kitchenTowels],
-                ['Bath mats', linens.bathMats],
-              ].map(([label, count]) => (
-                <tr key={label} className="border-b border-slate-100 last:border-0">
-                  <td className="py-2 text-slate-600">{label}</td>
-                  <td className="py-2 text-right font-mono font-medium">{count}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </SurfaceCard>
+      <div className="grid gap-6 lg:grid-cols-2">
+        <SurfaceCard
+          title="Workload"
+          description="Total productive minutes from configured service types."
+        >
+          <div className="space-y-3">
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-slate-700">Total minutes</span>
+              <span className="font-mono font-medium">{workload.totalMinutes}</span>
+            </div>
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-slate-700">Productive min / cleaner</span>
+              <span className="font-mono font-medium">{configuration.settings.productiveMinutesPerCleaner}</span>
+            </div>
+            <div className="flex items-center justify-between text-sm pt-2 border-t border-slate-200">
+              <span className="text-slate-700 font-medium">Cleaners needed</span>
+              <span className="font-mono font-semibold text-lg">{workload.cleanersNeeded}</span>
+            </div>
+          </div>
+        </SurfaceCard>
+
+        <SurfaceCard
+          title="Items forecast"
+          description="Tracked items expected for the selected date."
+        >
+          {forecastItems.length === 0 ? (
+            <p className="text-sm text-slate-500">No item consumption forecasted.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <tbody>
+                  {forecastItems.slice(0, 10).map((item) => (
+                    <tr key={item.itemId} className="border-b border-slate-100 last:border-0">
+                      <td className="py-2 text-slate-600">{item.itemLabel}</td>
+                      <td className="py-2 text-right font-mono font-medium">{item.quantity}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </SurfaceCard>
+      </div>
     </div>
   )
 }

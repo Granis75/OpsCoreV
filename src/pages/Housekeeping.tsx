@@ -1,16 +1,31 @@
 import { useEffect, useState } from 'react'
 import { PageSection } from '../components/ui/PageSection'
-import type { HousekeepingDailyPlan, HousekeepingEntry } from '../types/housekeeping'
-import { getDailyPlan, getDailyPlanEntries, getHousekeepingSettings } from '../lib/housekeeping/data'
+import type {
+  HousekeepingConfiguration,
+  HousekeepingDailyPlan,
+  HousekeepingEntry,
+} from '../types/housekeeping'
+import {
+  getDailyPlan,
+  getDailyPlanEntries,
+  getHousekeepingConfiguration,
+} from '../lib/housekeeping/data'
 import { HousekeepingOverview } from '../components/housekeeping/HousekeepingOverview'
 import { HousekeepingDailyPlanner } from '../components/housekeeping/HousekeepingDailyPlanner'
 import { HousekeepingPrintSheet } from '../components/housekeeping/HousekeepingPrintSheet'
 import { HousekeepingStaffing } from '../components/housekeeping/HousekeepingStaffing'
 import { HousekeepingLinenForecast } from '../components/housekeeping/HousekeepingLinenForecast'
 import { HousekeepingHistory } from '../components/housekeeping/HousekeepingHistory'
-import type { HousekeepingSettings } from '../types/housekeeping'
+import { HousekeepingSettingsPanel } from '../components/housekeeping/HousekeepingSettingsPanel'
 
-type HousekeepingView = 'overview' | 'planner' | 'sheet' | 'staffing' | 'linen' | 'history'
+type HousekeepingView =
+  | 'overview'
+  | 'planner'
+  | 'sheet'
+  | 'staffing'
+  | 'linen'
+  | 'history'
+  | 'settings'
 
 function todayDateInputValue() {
   const today = new Date()
@@ -25,45 +40,48 @@ export function Housekeeping() {
   const [selectedDate, setSelectedDate] = useState(todayDateInputValue)
   const [dailyPlan, setDailyPlan] = useState<HousekeepingDailyPlan | null>(null)
   const [entries, setEntries] = useState<HousekeepingEntry[]>([])
-  const [settings, setSettings] = useState<HousekeepingSettings | null>(null)
+  const [configuration, setConfiguration] = useState<HousekeepingConfiguration | null>(null)
   const [isLoadingPlan, setIsLoadingPlan] = useState(false)
-  const [isLoadingSettings, setIsLoadingSettings] = useState(true)
+  const [isLoadingConfiguration, setIsLoadingConfiguration] = useState(true)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
 
-  // Load settings once on mount
+  async function refreshConfiguration() {
+    const fetchedConfiguration = await getHousekeepingConfiguration()
+    setConfiguration(fetchedConfiguration)
+  }
+
   useEffect(() => {
     let isMounted = true
 
-    async function loadSettings() {
-      setIsLoadingSettings(true)
+    async function loadConfiguration() {
+      setIsLoadingConfiguration(true)
       setErrorMessage(null)
 
       try {
-        const fetchedSettings = await getHousekeepingSettings()
+        const fetchedConfiguration = await getHousekeepingConfiguration()
         if (isMounted) {
-          setSettings(fetchedSettings)
+          setConfiguration(fetchedConfiguration)
         }
       } catch (error) {
         if (isMounted) {
           setErrorMessage(
-            error instanceof Error ? error.message : 'Unable to load settings.',
+            error instanceof Error ? error.message : 'Unable to load housekeeping configuration.',
           )
         }
       } finally {
         if (isMounted) {
-          setIsLoadingSettings(false)
+          setIsLoadingConfiguration(false)
         }
       }
     }
 
-    void loadSettings()
+    void loadConfiguration()
 
     return () => {
       isMounted = false
     }
   }, [])
 
-  // Load daily plan and entries when date changes
   useEffect(() => {
     let isMounted = true
 
@@ -73,13 +91,11 @@ export function Housekeeping() {
 
       try {
         const fetchedPlan = await getDailyPlan(selectedDate)
+        const fetchedEntries = await getDailyPlanEntries(fetchedPlan.id)
+
         if (isMounted) {
           setDailyPlan(fetchedPlan)
-
-          const fetchedEntries = await getDailyPlanEntries(fetchedPlan.id)
-          if (isMounted) {
-            setEntries(fetchedEntries)
-          }
+          setEntries(fetchedEntries)
         }
       } catch (error) {
         if (isMounted) {
@@ -94,46 +110,38 @@ export function Housekeeping() {
       }
     }
 
-    if (settings) {
+    if (configuration) {
       void loadDailyPlan()
     }
 
     return () => {
       isMounted = false
     }
-  }, [selectedDate, settings])
+  }, [selectedDate, configuration])
 
   const handleDateChange = (newDate: string) => {
     setSelectedDate(newDate)
     setCurrentView('overview')
   }
 
-  const handleEntriesUpdate = (newEntries: HousekeepingEntry[]) => {
-    setEntries(newEntries)
-  }
-
-  const handlePlanUpdate = (updatedPlan: HousekeepingDailyPlan) => {
-    setDailyPlan(updatedPlan)
-  }
-
-  if (isLoadingSettings) {
+  if (isLoadingConfiguration) {
     return (
       <PageSection
         title="Housekeeping & Linen"
-        description="Daily room servicing, printable housekeeping sheets, staffing needs, and linen forecasting in one operational workflow."
+        description="Configurable room servicing, staffing, print sheets, and linen forecasting for each OPS workspace."
       >
         <div className="text-center py-12">
-          <p className="text-sm text-slate-500">Loading settings...</p>
+          <p className="text-sm text-slate-500">Loading configuration...</p>
         </div>
       </PageSection>
     )
   }
 
-  if (errorMessage && !settings) {
+  if (errorMessage && !configuration) {
     return (
       <PageSection
         title="Housekeeping & Linen"
-        description="Daily room servicing, printable housekeeping sheets, staffing needs, and linen forecasting in one operational workflow."
+        description="Configurable room servicing, staffing, print sheets, and linen forecasting for each OPS workspace."
       >
         <div className="rounded-lg border border-red-200 bg-red-50 p-4">
           <p className="text-sm font-medium text-red-900">Error</p>
@@ -146,11 +154,10 @@ export function Housekeeping() {
   return (
     <PageSection
       title="Housekeeping & Linen"
-      description="Daily room servicing, printable housekeeping sheets, staffing needs, and linen forecasting in one operational workflow."
+      description="Configurable room servicing, staffing, print sheets, and linen forecasting for each OPS workspace."
     >
-      {/* Navigation tabs */}
       <div className="flex items-center justify-between mb-8 gap-4 flex-wrap">
-        <nav className="flex gap-1" aria-label="Housekeeping views">
+        <nav className="flex gap-1 flex-wrap" aria-label="Housekeeping views">
           {[
             { id: 'overview', label: 'Overview' },
             { id: 'planner', label: 'Daily Planner' },
@@ -158,6 +165,7 @@ export function Housekeeping() {
             { id: 'staffing', label: 'Staffing' },
             { id: 'linen', label: 'Linen Forecast' },
             { id: 'history', label: 'History' },
+            { id: 'settings', label: 'Settings' },
           ].map(({ id, label }) => (
             <button
               key={id}
@@ -186,55 +194,60 @@ export function Housekeeping() {
         </label>
       </div>
 
-      {/* Error message */}
       {errorMessage && (
         <div className="mb-6 rounded-lg border border-red-200 bg-red-50 p-4">
           <p className="text-sm text-red-700">{errorMessage}</p>
         </div>
       )}
 
-      {/* Content */}
       <div>
-        {isLoadingPlan ? (
+        {isLoadingPlan && currentView !== 'settings' ? (
           <div className="text-center py-12">
             <p className="text-sm text-slate-500">Loading daily plan...</p>
           </div>
-        ) : currentView === 'overview' && dailyPlan && settings ? (
+        ) : currentView === 'overview' && dailyPlan && configuration ? (
           <HousekeepingOverview
             dailyPlan={dailyPlan}
             entries={entries}
-            settings={settings}
+            configuration={configuration}
             onOpenPlanner={() => setCurrentView('planner')}
             onPrintSheet={() => setCurrentView('sheet')}
           />
-        ) : currentView === 'planner' && dailyPlan && settings ? (
+        ) : currentView === 'planner' && dailyPlan && configuration ? (
           <HousekeepingDailyPlanner
             dailyPlan={dailyPlan}
             entries={entries}
-            settings={settings}
-            onEntriesUpdate={handleEntriesUpdate}
-            onPlanUpdate={handlePlanUpdate}
+            configuration={configuration}
+            onEntriesUpdate={setEntries}
+            onPlanUpdate={setDailyPlan}
           />
-        ) : currentView === 'sheet' && dailyPlan && settings ? (
+        ) : currentView === 'sheet' && dailyPlan && configuration ? (
           <HousekeepingPrintSheet
             dailyPlan={dailyPlan}
             entries={entries}
+            configuration={configuration}
           />
-        ) : currentView === 'staffing' && dailyPlan && settings ? (
+        ) : currentView === 'staffing' && dailyPlan && configuration ? (
           <HousekeepingStaffing
             dailyPlan={dailyPlan}
             entries={entries}
-            settings={settings}
-            onPlanUpdate={handlePlanUpdate}
+            configuration={configuration}
+            onPlanUpdate={setDailyPlan}
           />
-        ) : currentView === 'linen' && dailyPlan && settings ? (
+        ) : currentView === 'linen' && configuration ? (
           <HousekeepingLinenForecast
             entries={entries}
+            configuration={configuration}
           />
-        ) : currentView === 'history' && settings ? (
+        ) : currentView === 'history' && configuration ? (
           <HousekeepingHistory
-            settings={settings}
+            configuration={configuration}
             onSelectDate={handleDateChange}
+          />
+        ) : currentView === 'settings' && configuration ? (
+          <HousekeepingSettingsPanel
+            configuration={configuration}
+            onConfigurationUpdate={() => void refreshConfiguration()}
           />
         ) : null}
       </div>
