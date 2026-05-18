@@ -4,8 +4,12 @@ import type {
   HousekeepingEntry,
   HousekeepingInterventionType,
   HousekeepingItem,
+  HousekeepingItemStockSetting,
   ItemConsumptionResult,
   ServiceCount,
+  StockForecastRow,
+  StockOverviewSummary,
+  StockStatus,
   WorkloadCalculation,
 } from '../../types/housekeeping'
 
@@ -152,6 +156,74 @@ export function countInterventionTypes(
     workloadMinutes: type.workloadMinutes,
   }))
 }
+
+// ── Stock & Replenishment calculations ───────────────────────────────────────
+
+export function calculateProjectedStock(
+  currentStock: number,
+  incomingStock: number,
+  forecastDemand: number,
+): number {
+  return currentStock + incomingStock - forecastDemand
+}
+
+export function calculateSuggestedReorder(projectedStock: number, targetStock: number): number {
+  return Math.max(0, targetStock - projectedStock)
+}
+
+export function deriveStockStatus(projectedStock: number, minimumStock: number): StockStatus {
+  if (projectedStock < 0) return 'critical'
+  if (projectedStock < minimumStock) return 'low'
+  return 'healthy'
+}
+
+export function buildStockForecastRows(
+  stockSettings: HousekeepingItemStockSetting[],
+  items: HousekeepingItem[],
+  forecastConsumption: DailyConsumptionSummary,
+): StockForecastRow[] {
+  return stockSettings
+    .filter((setting) => setting.stockTrackingEnabled)
+    .flatMap((setting): StockForecastRow[] => {
+      const item = items.find((i) => i.id === setting.itemId)
+      if (!item) return []
+
+      const consumed = forecastConsumption.find((c) => c.itemId === setting.itemId)
+      const forecastDemand = consumed?.quantity ?? 0
+      const projectedStock = calculateProjectedStock(
+        setting.currentStock,
+        setting.incomingStock,
+        forecastDemand,
+      )
+
+      return [{
+        itemId: item.id,
+        itemLabel: item.label,
+        unitLabel: item.unitLabel,
+        category: item.category,
+        currentStock: setting.currentStock,
+        incomingStock: setting.incomingStock,
+        forecastDemand,
+        projectedStock,
+        minimumStock: setting.minimumStock,
+        targetStock: setting.targetStock,
+        suggestedReorder: calculateSuggestedReorder(projectedStock, setting.targetStock),
+        status: deriveStockStatus(projectedStock, setting.minimumStock),
+        stockSettingId: setting.id,
+      }]
+    })
+}
+
+export function computeStockOverviewSummary(rows: StockForecastRow[]): StockOverviewSummary {
+  return {
+    trackedItems: rows.length,
+    itemsAtRisk: rows.filter((r) => r.status === 'low' || r.status === 'critical').length,
+    criticalShortages: rows.filter((r) => r.status === 'critical').length,
+    totalSuggestedReorderUnits: rows.reduce((sum, r) => sum + r.suggestedReorder, 0),
+  }
+}
+
+// ── Intervention type label helper ───────────────────────────────────────────
 
 export function getInterventionTypeLabel(
   interventionTypeId: string,

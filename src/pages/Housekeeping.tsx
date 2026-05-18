@@ -17,6 +17,7 @@ import { HousekeepingStaffing } from '../components/housekeeping/HousekeepingSta
 import { HousekeepingLinenForecast } from '../components/housekeeping/HousekeepingLinenForecast'
 import { HousekeepingHistory } from '../components/housekeeping/HousekeepingHistory'
 import { HousekeepingSettingsPanel } from '../components/housekeeping/HousekeepingSettingsPanel'
+import { HousekeepingStockReplenishment } from '../components/housekeeping/HousekeepingStockReplenishment'
 
 type HousekeepingView =
   | 'overview'
@@ -24,6 +25,7 @@ type HousekeepingView =
   | 'sheet'
   | 'staffing'
   | 'linen'
+  | 'stock'
   | 'history'
   | 'settings'
 
@@ -164,6 +166,7 @@ export function Housekeeping() {
             { id: 'sheet', label: 'Printable Sheet' },
             { id: 'staffing', label: 'Staffing' },
             { id: 'linen', label: 'Linen Forecast' },
+            { id: 'stock', label: 'Stock & Replenishment' },
             { id: 'history', label: 'History' },
             { id: 'settings', label: 'Settings' },
           ].map(({ id, label }) => (
@@ -237,6 +240,10 @@ export function Housekeeping() {
         ) : currentView === 'linen' && configuration ? (
           <HousekeepingLinenForecast
             entries={entries}
+            configuration={configuration}
+          />
+        ) : currentView === 'stock' && configuration ? (
+          <HousekeepingStockReplenishment
             configuration={configuration}
           />
         ) : currentView === 'history' && configuration ? (

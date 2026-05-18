@@ -140,6 +140,77 @@ export interface HousekeepingConfiguration {
   consumptionRules: HousekeepingConsumptionRule[]
 }
 
+// ── Stock & Replenishment types ──────────────────────────────────────────────
+
+export type HousekeepingStockMovementType =
+  | 'adjustment'
+  | 'replenishment'
+  | 'consumption_correction'
+
+export const stockMovementTypeLabels: Record<HousekeepingStockMovementType, string> = {
+  adjustment: 'Adjustment',
+  replenishment: 'Replenishment',
+  consumption_correction: 'Consumption correction',
+}
+
+export interface HousekeepingItemStockSetting {
+  id: string
+  organizationId: string
+  itemId: string
+  stockTrackingEnabled: boolean
+  currentStock: number
+  minimumStock: number
+  targetStock: number
+  incomingStock: number
+  notes: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface HousekeepingStockMovement {
+  id: string
+  organizationId: string
+  itemId: string
+  movementType: HousekeepingStockMovementType
+  quantityDelta: number
+  note: string | null
+  createdBy: string | null
+  createdAt: string
+}
+
+export type StockStatus = 'healthy' | 'low' | 'critical'
+
+export const stockStatusLabels: Record<StockStatus, string> = {
+  healthy: 'Healthy',
+  low: 'Reorder soon',
+  critical: 'Critical shortage',
+}
+
+export interface StockForecastRow {
+  itemId: string
+  itemLabel: string
+  unitLabel: string
+  category: HousekeepingItemCategory | null
+  currentStock: number
+  incomingStock: number
+  forecastDemand: number
+  projectedStock: number
+  minimumStock: number
+  targetStock: number
+  suggestedReorder: number
+  status: StockStatus
+  stockSettingId: string
+}
+
+export interface StockOverviewSummary {
+  trackedItems: number
+  itemsAtRisk: number
+  criticalShortages: number
+  totalSuggestedReorderUnits: number
+}
+
+// ── Workload types ───────────────────────────────────────────────────────────
+
 export interface WorkloadCalculation {
   totalMinutes: number
   cleanersNeeded: number
