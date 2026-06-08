@@ -1,73 +1,76 @@
-# React + TypeScript + Vite
+# OpsCore
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+**Operations Control Prototype**
 
-Currently, two official plugins are available:
+OpsCore is an operations dashboard prototype designed to help small teams structure, monitor and control daily execution.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+The project explores how operational workflows can be translated into a clear digital interface, with a focus on visibility, status tracking and decision support.
 
-## React Compiler
+---
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## Problem
 
-## Expanding the ESLint configuration
+Many small teams manage operations through scattered tools:
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+* spreadsheets
+* messages
+* manual follow-ups
+* disconnected task lists
+* unclear status tracking
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+This creates friction, missed information and limited visibility on what is happening in the business.
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+---
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+## Solution
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+OpsCore provides a structured interface for tracking operational activity in one place.
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+The goal is to make daily execution easier to understand, prioritize and manage.
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+---
+
+## Key Features
+
+* Operational dashboard
+* Task and workflow visibility
+* Status-based tracking
+* Business-oriented interface structure
+* Clean UI for internal operations use cases
+
+---
+
+## Stack
+
+* React
+* TypeScript
+* Vite
+* Tailwind CSS
+
+---
+
+## Status
+
+Prototype / work in progress.
+
+This project is part of a broader exploration around internal tools, operational dashboards and business systems.
+
+---
+
+## Focus
+
+The focus is not only the technical stack.
+
+The focus is the business logic behind the interface:
+
+* What needs to be tracked
+* What information matters
+* How teams understand priorities
+* How operations move from scattered execution to structured control
+
+---
+
+## Author
+
+Built by Anis Allouache
+Business Systems · Internal Tools · Operations Software
